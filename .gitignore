@@ -1,6 +1,15 @@
+# secrets / local config
 .env
+.idea/
+
+# models: commit only our trained weights (via Git LFS)
 models/*.pt
+!models/ball_rim.pt
+models/runs/
+models/datasets/
 models/.ultralytics/
+
+# python
 __pycache__/
 .pytest_cache/
-.idea
+.venv/

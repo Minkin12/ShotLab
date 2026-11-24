@@ -4,13 +4,13 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_DB: shots
-      SHOTLAB_POSTGRES_USER: ${SHOTLAB_POSTGRES_USER:-shots}
-      SHOTLAB_POSTGRES_PASSWORD: ${SHOTLAB_POSTGRES_PASSWORD:?set SHOTLAB_POSTGRES_PASSWORD in .env}
+      POSTGRES_USER: ${SHOTLAB_POSTGRES_USER:-shots}
+      POSTGRES_PASSWORD: ${SHOTLAB_POSTGRES_PASSWORD:?set SHOTLAB_POSTGRES_PASSWORD in .env}
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./db/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${SHOTLAB_POSTGRES_USER} -d shots"]
+      test: ["CMD", "pg_isready", "-U", "shots", "-d", "shots", "-h", "localhost"]
       interval: 10s
       retries: 5
 
@@ -28,6 +28,7 @@ services:
     volumes:
       - ${VIDEO_DIR:?set VIDEO_DIR in .env}:/videos   # e.g. a share on your NAS
       - ./models:/models
+      - ${VIDEO_DIR}/datasets:/models/datasets
     # NVIDIA GPU (needs nvidia-container-toolkit). For CPU-only, delete this
     # block and set DEVICE=cpu in .env - it works, just much slower.
     deploy:

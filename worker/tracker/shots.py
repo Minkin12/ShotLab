@@ -19,6 +19,12 @@ RIM_DIAMETER_M = 0.4572  # 18 in
 TrackPoint = tuple[int, float, float, float]  # frame, cx, cy, ball width
 
 
+def rim_plane(rim: Box) -> float:  # ◀ NEW
+    """y of the rim opening. Many datasets box the rim *and net* together, so the
+    box centre sits mid-net; the opening is near the top of such a tall box."""
+    return rim.y1 + min(rim.h / 2, 0.15 * rim.w)  # ◀ NEW
+
+
 # --------------------------------------------------------------------------- #
 # Ball track & rim
 # --------------------------------------------------------------------------- #
@@ -114,14 +120,15 @@ def detect_shots(frames: list[FrameData], fps: float, cfg: Config) -> list[Shot]
 def _classify(
     track: list[TrackPoint], up_i: int, end_i: int, rim: Box, cfg: Config, number: int, fps: float
 ) -> Shot | None:
+    plane = rim_plane(rim)
     crossing = None
     for a, b in zip(track[up_i:end_i], track[up_i + 1 : end_i + 1]):
-        if a[2] <= rim.cy < b[2]:  # moving down through the rim plane
+        if a[2] <= plane < b[2]:
             crossing = (a, b)
     if crossing is None:
         return None
     a, b = crossing
-    frac = (rim.cy - a[2]) / (b[2] - a[2])
+    frac = (plane - a[2]) / (b[2] - a[2])
     x_cross = a[1] + frac * (b[1] - a[1])
     offset = abs(x_cross - rim.cx) / (rim.w / 2)
 
@@ -209,4 +216,4 @@ def fit_flight(shot: Shot, fps: float) -> None:
     shot.launch_angle_deg = round(math.degrees(math.atan2(-vy0, hvx)), 1)
     shot.entry_angle_deg = round(math.degrees(math.atan2(vy_cross, hvx)), 1)
     shot.release_speed_mps = round(math.hypot(vx, vy0) * scale, 2)
-    shot.apex_above_rim_m = round((shot.rim.cy - y_apex) * scale, 2)
+    shot.apex_above_rim_m = round((rim_plane(shot.rim) - y_apex) * scale, 2)

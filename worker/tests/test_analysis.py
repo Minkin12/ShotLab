@@ -125,3 +125,14 @@ def test_noisy_detections(cfg, fps):
     s = shots[0]
     assert s.launch_angle_deg == pytest.approx(50, abs=3)
     assert s.form["min_knee_angle"] == pytest.approx(140, abs=6)
+
+
+def test_rim_box_including_net(cfg):
+    """Datasets often label rim+net as one tall box; the rim plane must stay at the top."""
+    tall = Box(RIM.x1, RIM.y1, RIM.x2, RIM.y1 + 75)  # 60 wide, 75 tall (net hanging below)
+    frames, _ = shot_frames(target_x=RIM.cx)
+    for f in frames:
+        f.rim = tall
+    shots = analyze_frames(frames, FPS, cfg)
+    assert len(shots) == 1 and shots[0].made
+    assert shots[0].launch_angle_deg == pytest.approx(50, abs=2)

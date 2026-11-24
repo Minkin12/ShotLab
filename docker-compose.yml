@@ -40,9 +40,13 @@ services:
               capabilities: [gpu]
 
   grafana:
+    container_name: shotlab-grafana
     image: grafana/grafana-oss:11.4.0
     restart: unless-stopped
     depends_on: [db]
+    networks:
+      - default      # ShotLab's own network, to reach db
+      - homelab_network      # shared with Caddy and Homepage
     ports:
       - "${GRAFANA_PORT:-3000}:3000"
     environment:
@@ -58,3 +62,7 @@ services:
 volumes:
   pgdata:
   grafana:
+
+networks:
+  homelab_network:
+    external: true     

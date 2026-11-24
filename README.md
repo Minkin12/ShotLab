@@ -153,3 +153,5 @@ cd worker && pip install numpy pytest && PYTHONPATH=. pytest tests
 The tests generate synthetic shots (a ballistic ball flight and a shooter with a knee dip) and check make/miss, launch angle, release speed, release frame, hand detection and knee bend. They also add realistic detection noise and dropped frames.
 
 Note: `ultralytics` is licensed AGPL-3.0. That's fine for a personal homelab project.
+
+Ball/rim model trained on datasets listed in models/DATASETS.md

@@ -17,6 +17,7 @@ services:
   tracker:
     build: ./worker
     restart: unless-stopped
+    shm_size: "4gb"
     depends_on:
       db:
         condition: service_healthy

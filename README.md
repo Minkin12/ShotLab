@@ -74,7 +74,7 @@ Re-processing a file (moving it back into `incoming/`) replaces that session's d
 docker compose run --rm tracker process /videos/incoming/test.mp4 --debug --no-db
 ```
 
-This prints every detected shot as JSON and writes `test_debug.mp4` next to the input. That copy has the ball, rim, skeleton, release point and running tally drawn on it. Watch it before trusting the numbers.
+This prints every detected shot as JSON and writes `debug/test_debug.mp4`. That copy has the ball, rim, skeleton, release point and running tally drawn on it. Watch it before trusting the numbers.
 
 ## 4. Tuning
 

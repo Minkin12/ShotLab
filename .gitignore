@@ -3,3 +3,4 @@ models/*.pt
 models/.ultralytics/
 __pycache__/
 .pytest_cache/
+.idea

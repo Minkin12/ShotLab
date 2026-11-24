@@ -1,0 +1,4 @@
+ultralytics>=8.3
+psycopg[binary]>=3.2
+numpy
+opencv-python-headless

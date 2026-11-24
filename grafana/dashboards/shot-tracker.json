@@ -1,0 +1,815 @@
+{
+  "uid": "shot-tracker",
+  "title": "Shot Tracker",
+  "tags": [
+    "basketball"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "graphTooltip": 1,
+  "time": {
+    "from": "now-90d",
+    "to": "now"
+  },
+  "refresh": "",
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Attempts",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "shotdb"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "shotdb"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT count(*) FROM shots WHERE $__timeFilter(shot_time)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "none",
+        "graphMode": "none",
+        "textMode": "value"
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Makes",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "shotdb"
+      },
+      "gridPos": {
+        "x": 4,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "shotdb"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT count(*) FILTER (WHERE made) FROM shots WHERE $__timeFilter(shot_time)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "none",
+        "graphMode": "none",
+        "textMode": "value"
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "FG %",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "shotdb"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "shotdb"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT round(100.0 * avg(made::int), 1) FROM shots WHERE $__timeFilter(shot_time)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "none",
+        "graphMode": "none",
+        "textMode": "value"
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Avg launch angle",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "shotdb"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "shotdb"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT avg(launch_angle_deg) FROM shots WHERE $__timeFilter(shot_time)"
+        }
+      ],
+      "description": "45-55 deg is the usual target for jump shots (side-on camera).",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "degree",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "none",
+        "graphMode": "none",
+        "textMode": "value"
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Avg release elbow",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "shotdb"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "shotdb"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT avg(release_elbow_angle) FROM shots WHERE $__timeFilter(shot_time)"
+        }
+      ],
+      "description": "Shoulder-elbow-wrist angle at release. 180 = arm fully extended.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "degree",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          },
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "none",
+        "graphMode": "none",
+        "textMode": "value"
+      }
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Sessions",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "shotdb"
+      },
+      "gridPos": {
+        "x": 20,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "shotdb"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT count(*) FROM sessions WHERE $__timeFilter(recorded_at)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "none",
+        "graphMode": "none",
+        "textMode": "value"
+      }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "FG % by session",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "shotdb"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "shotdb"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "time_series",
+          "rawSql": "SELECT recorded_at AS time, fg_pct AS \"FG %\", attempts AS \"attempts\"\nFROM session_summary WHERE $__timeFilter(recorded_at) AND attempts > 0 ORDER BY 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "showPoints": "always",
+            "pointSize": 8,
+            "lineWidth": 2
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "attempts"
+            },
+            "properties": [
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "bars"
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 30
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "FG %"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "min",
+                "value": 0
+              },
+              {
+                "id": "max",
+                "value": 100
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Consistency by session (lower spread = more repeatable)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "shotdb"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 4,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "shotdb"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "time_series",
+          "rawSql": "SELECT recorded_at AS time,\n       sd_launch_angle AS \"launch angle spread\",\n       sd_release_elbow AS \"release elbow spread\"\nFROM session_summary WHERE $__timeFilter(recorded_at) AND attempts > 2 ORDER BY 1"
+        }
+      ],
+      "description": "Standard deviation within each session. Repeatable mechanics show up here before FG% moves.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "degree",
+          "custom": {
+            "drawStyle": "line",
+            "showPoints": "always",
+            "pointSize": 7,
+            "lineWidth": 2
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 9,
+      "type": "table",
+      "title": "Form: makes vs misses",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "shotdb"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 12,
+        "w": 24,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "shotdb"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT CASE WHEN made THEN 'Makes' ELSE 'Misses' END AS \"result\",\n       count(*) AS \"shots\",\n       round(avg(launch_angle_deg)::numeric, 1) AS \"launch angle\",\n       round(avg(entry_angle_deg)::numeric, 1) AS \"entry angle\",\n       round(avg(release_speed_mps)::numeric, 2) AS \"release speed m/s\",\n       round(avg(release_elbow_angle)::numeric, 1) AS \"release elbow\",\n       round(avg(set_point_elbow_angle)::numeric, 1) AS \"set point elbow\",\n       round(avg(min_knee_angle)::numeric, 1) AS \"knee bend\",\n       round(avg(dip_to_release_ms)::numeric) AS \"dip to release ms\",\n       round(avg(release_height_ratio)::numeric, 2) AS \"release height\",\n       round(avg(torso_lean_deg)::numeric, 1) AS \"torso lean\",\n       round(avg(jump_ratio)::numeric, 3) AS \"jump\"\nFROM shots WHERE $__timeFilter(shot_time) AND (form_confidence IS NULL OR form_confidence >= 0.5)\nGROUP BY made ORDER BY made DESC"
+        }
+      ],
+      "description": "Where your makes and misses differ is what to work on. All angles are 2D, from the camera's view.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "center"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "md"
+      }
+    },
+    {
+      "id": 10,
+      "type": "barchart",
+      "title": "Make % by launch angle",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "shotdb"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 17,
+        "w": 8,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "shotdb"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT (floor(launch_angle_deg / 3) * 3)::int || '-' || (floor(launch_angle_deg / 3) * 3 + 3)::int\n       || '° (n=' || count(*) || ')' AS bucket,\n       round(100.0 * avg(made::int), 1) AS \"make %\"\nFROM shots\nWHERE $__timeFilter(shot_time) AND launch_angle_deg IS NOT NULL\nGROUP BY floor(launch_angle_deg / 3)\nHAVING count(*) >= 3\nORDER BY floor(launch_angle_deg / 3)"
+        }
+      ],
+      "description": "Buckets with fewer than 3 shots are hidden.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "xField": "bucket",
+        "orientation": "vertical",
+        "showValue": "auto",
+        "legend": {
+          "showLegend": false,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        },
+        "xTickLabelRotation": -30
+      }
+    },
+    {
+      "id": 11,
+      "type": "barchart",
+      "title": "Make % by release elbow angle",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "shotdb"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 17,
+        "w": 8,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "shotdb"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT (floor(release_elbow_angle / 5) * 5)::int || '-' || (floor(release_elbow_angle / 5) * 5 + 5)::int\n       || '° (n=' || count(*) || ')' AS bucket,\n       round(100.0 * avg(made::int), 1) AS \"make %\"\nFROM shots\nWHERE $__timeFilter(shot_time) AND release_elbow_angle IS NOT NULL\nGROUP BY floor(release_elbow_angle / 5)\nHAVING count(*) >= 3\nORDER BY floor(release_elbow_angle / 5)"
+        }
+      ],
+      "description": "Do you make more when you fully extend?",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "xField": "bucket",
+        "orientation": "vertical",
+        "showValue": "auto",
+        "legend": {
+          "showLegend": false,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        },
+        "xTickLabelRotation": -30
+      }
+    },
+    {
+      "id": 12,
+      "type": "barchart",
+      "title": "Make % by knee bend",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "shotdb"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 17,
+        "w": 8,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "shotdb"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT (floor(min_knee_angle / 10) * 10)::int || '-' || (floor(min_knee_angle / 10) * 10 + 10)::int\n       || '° (n=' || count(*) || ')' AS bucket,\n       round(100.0 * avg(made::int), 1) AS \"make %\"\nFROM shots\nWHERE $__timeFilter(shot_time) AND min_knee_angle IS NOT NULL\nGROUP BY floor(min_knee_angle / 10)\nHAVING count(*) >= 3\nORDER BY floor(min_knee_angle / 10)"
+        }
+      ],
+      "description": "Lower angle = deeper dip. Tired legs show up as shallower dips late in sessions.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "xField": "bucket",
+        "orientation": "vertical",
+        "showValue": "auto",
+        "legend": {
+          "showLegend": false,
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        },
+        "xTickLabelRotation": -30
+      }
+    },
+    {
+      "id": 13,
+      "type": "timeseries",
+      "title": "Fatigue check: shot by shot",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "shotdb"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 26,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "shotdb"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "time_series",
+          "rawSql": "SELECT shot_time AS time,\n       min_knee_angle AS \"knee bend\",\n       release_elbow_angle AS \"release elbow\",\n       launch_angle_deg AS \"launch angle\"\nFROM shots WHERE $__timeFilter(shot_time) ORDER BY 1"
+        }
+      ],
+      "description": "Zoom into a single session to see whether your legs or arc drop off as you tire.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "degree",
+          "custom": {
+            "drawStyle": "points",
+            "pointSize": 6,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 14,
+      "type": "table",
+      "title": "Shots",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "shotdb"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 34,
+        "w": 24,
+        "h": 10
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "shotdb"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT shot_time AS \"time\",\n       CASE WHEN made THEN 'MAKE' ELSE 'miss' END AS \"result\",\n       launch_angle_deg AS \"launch\", entry_angle_deg AS \"entry\",\n       release_speed_mps AS \"speed m/s\", release_elbow_angle AS \"elbow\",\n       min_knee_angle AS \"knee\", dip_to_release_ms AS \"dip ms\",\n       torso_lean_deg AS \"lean\", form_confidence AS \"pose conf\",\n       clip_path AS \"clip\"\nFROM shots WHERE $__timeFilter(shot_time) ORDER BY shot_time DESC LIMIT 500"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "result"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "MAKE": {
+                        "color": "green",
+                        "index": 0
+                      },
+                      "miss": {
+                        "color": "red",
+                        "index": 1
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    }
+  ]
+}

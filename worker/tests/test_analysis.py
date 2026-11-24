@@ -1,0 +1,127 @@
+import math
+
+import numpy as np
+import pytest
+
+from synth import BALL_W, RIM, SCALE, flight_speed, shot_frames
+from tracker.config import Config
+from tracker.form import joint_angle
+from tracker.frames import Box, FrameData
+from tracker.pipeline import analyze_frames, shot_row
+from tracker.shots import clean_track
+
+FPS = 60.0
+
+
+@pytest.fixture
+def cfg():
+    c = Config()
+    c.shooting_hand = "auto"
+    return c
+
+
+def test_joint_angle():
+    a, b = np.array([0.0, 0.0]), np.array([1.0, 0.0])
+    assert joint_angle(a, b, np.array([2.0, 0.0])) == pytest.approx(180)
+    assert joint_angle(a, b, np.array([1.0, 1.0])) == pytest.approx(90)
+    assert joint_angle(a, b, np.array([0.0, 0.0])) == pytest.approx(0)
+
+
+def test_make(cfg):
+    frames, _ = shot_frames(target_x=RIM.cx)
+    shots = analyze_frames(frames, FPS, cfg)
+    assert len(shots) == 1
+    assert shots[0].made
+
+
+def test_miss_long(cfg):
+    frames, _ = shot_frames(target_x=RIM.cx + 50)  # crosses rim plane past the rim
+    shots = analyze_frames(frames, FPS, cfg)
+    assert len(shots) == 1
+    assert not shots[0].made
+
+
+def test_flight_metrics(cfg):
+    frames, _ = shot_frames(angle=50, target_x=RIM.cx)
+    s = analyze_frames(frames, FPS, cfg)[0]
+    assert s.launch_angle_deg == pytest.approx(50, abs=1.5)
+    v_true = flight_speed(50, (RIM.cx, RIM.cy)) * SCALE
+    assert s.release_speed_mps == pytest.approx(v_true, rel=0.05)
+    assert s.entry_angle_deg > 0
+    assert s.apex_above_rim_m > 0
+
+
+def test_release_and_form(cfg):
+    frames, rel = shot_frames(knee_dip_before=0.4)
+    s = analyze_frames(frames, FPS, cfg)[0]
+    assert s.form["shooting_hand"] == "right"
+    assert abs(s.release_frame - rel) <= 2
+    assert s.form["min_knee_angle"] == pytest.approx(140, abs=3)
+    assert s.form["dip_to_release_ms"] == pytest.approx(400, abs=40)
+    assert 0 < s.form["release_elbow_angle"] <= 180
+    # synthetic wrist y=462, nose y=450, ankle y=780 -> (780-462)/(780-450)
+    assert s.form["release_height_ratio"] == pytest.approx(0.96, abs=0.02)
+    assert s.form["torso_lean_deg"] == pytest.approx(0, abs=1)
+    assert s.form["jump_ratio"] == pytest.approx(0, abs=0.01)  # set shot
+    row = shot_row(s, FPS)
+    assert row["release_elbow_angle"] == s.form["release_elbow_angle"]
+    assert row["video_offset_s"] == pytest.approx(rel / FPS, abs=0.05)
+
+
+def test_no_pose_still_tracks(cfg):
+    frames, rel = shot_frames(with_pose=False)
+    s = analyze_frames(frames, FPS, cfg)[0]
+    assert s.made
+    assert s.release_frame is None
+    # release found from the ball's flight alone
+    assert abs(s.start_frame - rel) <= 2
+    assert s.launch_angle_deg == pytest.approx(50, abs=2)
+    assert shot_row(s, FPS)["release_elbow_angle"] is None
+
+
+def test_two_shots(cfg):
+    a, _ = shot_frames(target_x=RIM.cx)
+    b, _ = shot_frames(target_x=RIM.cx + 50, start=len(a) + 30)
+    shots = analyze_frames(a + b, FPS, cfg)
+    assert [s.made for s in shots] == [True, False]
+    assert [s.number for s in shots] == [1, 2]
+
+
+def test_clean_track_drops_outlier():
+    frames = []
+    for i in range(10):
+        x = 100 + 10 * i
+        if i == 5:
+            x = 2000  # spurious detection
+        frames.append(FrameData(i, i / FPS, ball=Box(x - 15, 300, x + 15, 330)))
+    xs = [p[1] for p in clean_track(frames, FPS)]
+    assert 2000 not in xs
+    assert len(xs) == 9
+
+
+def test_ball_held_overhead_is_not_a_shot(cfg):
+    frames = []
+    for i in range(int(5 * FPS)):  # ball sits above the rim for 5 s, never drops
+        frames.append(FrameData(i, i / FPS, ball=Box(985, 200, 985 + BALL_W, 230), rim=RIM))
+    assert analyze_frames(frames, FPS, cfg) == []
+
+
+@pytest.mark.parametrize("fps", [30.0, 60.0])
+def test_noisy_detections(cfg, fps):
+    """Jittery boxes and ~20% dropped ball detections, like a real detector."""
+    rng = np.random.default_rng(7)
+    frames, rel = shot_frames(fps=fps, target_x=RIM.cx)
+    for f in frames:
+        if f.ball is not None:
+            if rng.random() < 0.2:
+                f.ball = None
+                continue
+            j = rng.normal(0, 1.5, 2)
+            f.ball = Box(f.ball.x1 + j[0], f.ball.y1 + j[1], f.ball.x2 + j[0], f.ball.y2 + j[1])
+        if f.pose is not None:
+            f.pose.kpts[:, :2] += rng.normal(0, 2.0, (17, 2))
+    shots = analyze_frames(frames, fps, cfg)
+    assert len(shots) == 1 and shots[0].made
+    s = shots[0]
+    assert s.launch_angle_deg == pytest.approx(50, abs=3)
+    assert s.form["min_knee_angle"] == pytest.approx(140, abs=6)

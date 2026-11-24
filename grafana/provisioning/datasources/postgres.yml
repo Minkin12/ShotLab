@@ -1,0 +1,14 @@
+apiVersion: 1
+datasources:
+  - name: ShotDB
+    uid: shotdb
+    type: grafana-postgresql-datasource
+    url: db:5432
+    user: $SHOTLAB_POSTGRES_USER
+    isDefault: true
+    jsonData:
+      database: shots
+      sslmode: disable
+      postgresVersion: 1600
+    secureJsonData:
+      password: $SHOTLAB_POSTGRES_PASSWORD

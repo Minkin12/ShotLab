@@ -1,0 +1,58 @@
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: shots
+      SHOTLAB_POSTGRES_USER: ${SHOTLAB_POSTGRES_USER:-shots}
+      SHOTLAB_POSTGRES_PASSWORD: ${SHOTLAB_POSTGRES_PASSWORD:?set SHOTLAB_POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${SHOTLAB_POSTGRES_USER} -d shots"]
+      interval: 10s
+      retries: 5
+
+  tracker:
+    build: ./worker
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${SHOTLAB_POSTGRES_USER:-shots}:${SHOTLAB_POSTGRES_PASSWORD}@db:5432/shots
+      VIDEO_ROOT: /videos
+    volumes:
+      - ${VIDEO_DIR:?set VIDEO_DIR in .env}:/videos   # e.g. a share on your NAS
+      - ./models:/models
+    # NVIDIA GPU (needs nvidia-container-toolkit). For CPU-only, delete this
+    # block and set DEVICE=cpu in .env - it works, just much slower.
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  grafana:
+    image: grafana/grafana-oss:11.4.0
+    restart: unless-stopped
+    depends_on: [db]
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    environment:
+      SHOTLAB_POSTGRES_USER: ${SHOTLAB_POSTGRES_USER:-shots}
+      SHOTLAB_POSTGRES_PASSWORD: ${SHOTLAB_POSTGRES_PASSWORD}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/shot-tracker.json
+    volumes:
+      - grafana:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+
+volumes:
+  pgdata:
+  grafana:

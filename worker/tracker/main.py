@@ -39,7 +39,9 @@ def process_file(path: Path, cfg: Config, detector, *, save: bool = True, debug:
                 row["clip_path"] = str(rel)
 
     if debug or cfg.debug_video:
-        out = cfg.debug / f"{path.stem}_debug.mp4" if save else path.with_name(f"{path.stem}_debug.mp4")
+        # never write next to the input: a debug file in incoming/ would be picked up as a new session
+        base = cfg.debug if cfg.video_root.exists() else path.parent / "debug"
+        out = base / f"{path.stem}_debug.mp4"
         media.write_debug_video(info, frames, shots, out)
         log.info("debug video -> %s", out)
 
@@ -73,7 +75,11 @@ def watch(cfg: Config) -> None:
     # Polling instead of inotify: inotify doesn't fire on NFS/SMB mounts from a NAS.
     while True:
         for path in sorted(cfg.incoming.iterdir()):
-            if path.suffix.lower() not in VIDEO_EXT or not _stable(path, sizes):
+            if (path.suffix.lower() not in VIDEO_EXT
+                    or path.stem.endswith("_debug")
+                    or path.name.startswith(".")  # in-progress uploads (Synology Drive, rsync)
+                    or not _stable(path, sizes)
+            ):
                 continue
             sizes.pop(path, None)
             log.info("processing %s", path.name)

@@ -5,6 +5,7 @@ synthetic data. Image coordinates: x to the right, y DOWN.
 """
 from __future__ import annotations
 
+import logging
 import math
 from bisect import bisect_left, bisect_right
 
@@ -13,16 +14,25 @@ import numpy as np
 from .config import Config
 from .frames import Box, FrameData, Shot
 
+log = logging.getLogger(__name__)
+
 G = 9.81  # m/s^2
 RIM_DIAMETER_M = 0.4572  # 18 in
+
+# Ball-flight quality gate: only report arc metrics from a well-sampled, ballistic track
+MIN_FLIGHT_POINTS = 8  # ball detections between release and the rim
+MIN_COVERAGE = 0.6  # detections must span >= 60% of the flight time
+MAX_GAP = 0.35  # no hole bigger than 35% of the flight time
+MIN_EACH_SIDE_OF_APEX = 2  # points on the way up AND on the way down
+MAX_RMS_BALL_WIDTHS = 0.5  # fit residual, in ball widths
 
 TrackPoint = tuple[int, float, float, float]  # frame, cx, cy, ball width
 
 
-def rim_plane(rim: Box) -> float:  # ◀ NEW
+def rim_plane(rim: Box) -> float:
     """y of the rim opening. Many datasets box the rim *and net* together, so the
     box centre sits mid-net; the opening is near the top of such a tall box."""
-    return rim.y1 + min(rim.h / 2, 0.15 * rim.w)  # ◀ NEW
+    return rim.y1 + min(rim.h / 2, 0.15 * rim.w)
 
 
 # --------------------------------------------------------------------------- #
@@ -123,7 +133,7 @@ def _classify(
     plane = rim_plane(rim)
     crossing = None
     for a, b in zip(track[up_i:end_i], track[up_i + 1 : end_i + 1]):
-        if a[2] <= plane < b[2]:
+        if a[2] <= plane < b[2]:  # moving down through the rim plane
             crossing = (a, b)
     if crossing is None:
         return None
@@ -179,37 +189,65 @@ def flight_start(shot: Shot, fps: float) -> int:
 def fit_flight(shot: Shot, fps: float) -> None:
     """Fit x(t) linear, y(t) quadratic from release to the rim crossing.
 
-    Fills launch/entry angle, release speed and apex height. Angles are true
-    angles only if the camera looks at the shot side-on (perpendicular to the
-    shooter->rim line); at other angles they are consistent but inflated.
-    Metres per pixel comes from gravity (fitted vertical acceleration),
-    falling back to the rim width if the fit looks off.
+    Fills launch/entry angle, release speed and apex height - but only when the
+    track passes the quality gate below; otherwise they stay None (no number is
+    better than a wrong one in the dashboard). The reason is logged.
+
+    Angles are true angles only if the camera looks at the shot side-on
+    (perpendicular to the shooter->rim line); at other angles they are
+    consistent but inflated. Metres per pixel comes from gravity (fitted
+    vertical acceleration), checked against the rim width.
     """
     start = shot.start_frame if shot.start_frame is not None else flight_start(shot, fps)
     shot.start_frame = start
     pts = [p for p in shot.track if start <= p[0] <= shot.cross_frame]
-    if len(pts) < 6:
-        return
 
-    f = np.array([p[0] for p in pts], dtype=float)
+    def skip(reason: str) -> None:
+        log.info("shot %d: arc metrics skipped (%s)", shot.number, reason)
+
+    if len(pts) < MIN_FLIGHT_POINTS:
+        return skip(f"{len(pts)} ball detections in flight, need {MIN_FLIGHT_POINTS}")
+
+    flight = max(shot.cross_frame - start, 1)
+    frames_ = [p[0] for p in pts]
+    coverage = (frames_[-1] - frames_[0]) / flight
+    if coverage < MIN_COVERAGE:
+        return skip(f"detections cover {coverage:.0%} of the flight")
+    gap = max(b - a for a, b in zip(frames_, frames_[1:])) / flight
+    if gap > MAX_GAP:
+        return skip(f"ball lost for {gap:.0%} of the flight")
+
+    f = np.array(frames_, dtype=float)
     t = (f - f[0]) / fps
     x = np.array([p[1] for p in pts])
     y = np.array([p[2] for p in pts])
 
-    vx, _ = np.polyfit(t, x, 1)
+    vx, bx = np.polyfit(t, x, 1)
     a2, a1, a0 = np.polyfit(t, y, 2)
     ay = 2 * a2  # px/s^2, positive = downward
     if ay <= 0:
-        return  # not a ballistic arc
+        return skip("track is not a ballistic arc")
+
+    t_apex = -a1 / (2 * a2)
+    up, down = int((t < t_apex).sum()), int((t > t_apex).sum())
+    if min(up, down) < MIN_EACH_SIDE_OF_APEX:
+        return skip(f"{up} points before the apex, {down} after")
+
+    ball_w = float(np.median([p[3] for p in pts]))
+    resid = np.hypot(x - (vx * t + bx), y - (a2 * t**2 + a1 * t + a0))
+    rms = float(np.sqrt(np.mean(resid**2))) / max(ball_w, 1.0)
+    if rms > MAX_RMS_BALL_WIDTHS:
+        return skip(f"poor fit ({rms:.2f} ball widths off)")
 
     rim_scale = RIM_DIAMETER_M / max(shot.rim.w, 1.0)
     grav_scale = G / ay
-    scale = grav_scale if 0.5 * rim_scale <= grav_scale <= 2.0 * rim_scale else rim_scale
+    if not 0.5 * rim_scale <= grav_scale <= 2.0 * rim_scale:
+        return skip("arc's gravity doesn't match the rim size")
+    scale = grav_scale
 
     vy0 = a1  # dy/dt at t=0 (negative = upward)
     t_cross = t[-1]
     vy_cross = 2 * a2 * t_cross + a1
-    t_apex = -a1 / (2 * a2)
     y_apex = a2 * t_apex**2 + a1 * t_apex + a0
     hvx = abs(vx) or 1e-6
 

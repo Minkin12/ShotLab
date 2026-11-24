@@ -155,3 +155,34 @@ def test_release_when_ball_lost_during_extension(cfg):
     s = analyze_frames(frames, FPS, cfg)[0]
     assert abs(s.release_frame - rel) <= 2
     assert s.form["release_elbow_angle"] > 160
+
+
+def test_sparse_flight_gives_no_arc(cfg):
+    """Only a handful of in-flight detections: the shot is still counted, arc stays empty."""
+    frames, rel = shot_frames(target_x=RIM.cx)
+    for f in frames:
+        if f.ball is not None and f.idx > rel + 3 and (f.idx - rel) % 20:
+            f.ball = None  # keep every 20th frame in flight only (~6 points)
+    shots = analyze_frames(frames, FPS, cfg)
+    assert len(shots) == 1
+    assert shots[0].launch_angle_deg is None and shots[0].release_speed_mps is None
+
+
+def test_ball_lost_around_apex_gives_no_arc(cfg):
+    frames, rel = shot_frames(target_x=RIM.cx)
+    for f in frames:
+        if f.ball is not None and rel + 10 <= f.idx <= rel + 45:
+            f.ball = None  # long hole in the middle of the flight
+    s = analyze_frames(frames, FPS, cfg)[0]
+    assert s.launch_angle_deg is None
+
+
+def test_outlier_points_give_no_arc(cfg):
+    rng = np.random.default_rng(3)
+    frames, rel = shot_frames(target_x=RIM.cx)
+    for f in frames:
+        if f.ball is not None and f.idx > rel and rng.random() < 0.5:
+            j = rng.normal(0, 40, 2)  # wild jitter: another object mistaken for the ball
+            f.ball = Box(f.ball.x1 + j[0], f.ball.y1 + j[1], f.ball.x2 + j[0], f.ball.y2 + j[1])
+    s = analyze_frames(frames, FPS, cfg)[0]
+    assert s.launch_angle_deg is None

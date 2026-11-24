@@ -136,3 +136,22 @@ def test_rim_box_including_net(cfg):
     shots = analyze_frames(frames, FPS, cfg)
     assert len(shots) == 1 and shots[0].made
     assert shots[0].launch_angle_deg == pytest.approx(50, abs=2)
+
+def test_release_when_ball_lost_during_extension(cfg):
+    """Ball detections drop out while the arm extends (motion blur): release must
+    still land at full extension, not at the set point where the ball was last seen."""
+    frames, rel = shot_frames()
+    shoulder, elbow = np.array([390.0, 500.0]), np.array([430.0, 500.0])
+    by_idx = {f.idx: f for f in frames}
+    for i in range(rel - 15, rel + 6):
+        theta = math.radians(min(175.0, 60.0 + (175.0 - 60.0) * (i - (rel - 15)) / 15))
+        wrist = elbow + 40 * np.array([-math.cos(theta), -math.sin(theta)])
+        k = by_idx[i].pose.kpts
+        k[6, :2], k[8, :2], k[10, :2] = shoulder, elbow, wrist
+        if i <= rel - 9:  # ball still seen in the hand at the set point
+            by_idx[i].ball = Box(wrist[0] - 15, wrist[1] - 15, wrist[0] + 15, wrist[1] + 15)
+        elif i <= rel:  # ...then lost during the extension
+            by_idx[i].ball = None
+    s = analyze_frames(frames, FPS, cfg)[0]
+    assert abs(s.release_frame - rel) <= 2
+    assert s.form["release_elbow_angle"] > 160

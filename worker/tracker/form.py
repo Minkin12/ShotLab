@@ -69,14 +69,43 @@ def detect_hand(by_idx: dict[int, FrameData], shot: Shot, fps: float) -> str | N
     return max(votes, key=votes.get)
 
 
+def _elbow_angle(f: FrameData, hand: str) -> float | None:
+    if f.pose is None:
+        return None
+    k = SIDES[hand]
+    p = [f.pose.point(k["shoulder"]), f.pose.point(k["elbow"]), f.pose.point(k["wrist"])]
+    return None if any(q is None for q in p) else joint_angle(*p)
+
+
 def find_release(by_idx: dict[int, FrameData], shot: Shot, fps: float, hand: str) -> int | None:
-    """Last frame the ball is still in the shooting hand before it rises above the rim."""
-    release = None
+    """Frame the ball leaves the shooting hand.  # ◀ CHANGED (docstring)
+
+    1. Last frame the ball is detected in the hand before it rises above the rim.
+    2. Ball detections often drop out during the fast final arm extension
+       (motion blur), so step 1 can land on the set point. The real release
+       happens at (near) full extension: if the elbow keeps opening by 15+ deg
+       in the next 0.3 s, take the first frame where it reaches 97% of its peak.
+    """
+    held = None
     for f in _window(by_idx, shot.up_frame - int(1.5 * fps), shot.up_frame):
         d = _wrist_ball_dist(f, hand)
         if d is not None and d <= HELD_DIST:
-            release = f.idx
-    return release
+            held = f.idx
+    if held is None:
+        return None
+
+    angles = [
+        (f.idx, a)
+        for f in _window(by_idx, held, min(shot.up_frame, held + int(0.3 * fps)))
+        if (a := _elbow_angle(f, hand)) is not None
+    ]
+    if not angles:
+        return held
+    angles = _smoothed(angles)
+    peak = max(a for _, a in angles)
+    if peak - angles[0][1] < 15:  # arm was already extended when the ball was last seen
+        return held
+    return next(fi for fi, a in angles if a >= 0.97 * peak)
 
 
 def _smoothed(values: list[tuple[int, float]]) -> list[tuple[int, float]]:

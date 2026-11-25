@@ -215,3 +215,41 @@ def test_few_stray_detections_are_trimmed(cfg):
         f.ball = Box(f.ball.x1 + 45, f.ball.y1 - 45, f.ball.x2 + 45, f.ball.y2 - 45)
     s = analyze_frames(frames, FPS, cfg)[0]
     assert s.launch_angle_deg == pytest.approx(50, abs=2)
+
+
+def test_implausible_arc_is_skipped(cfg):
+    frames, _ = shot_frames(angle=77, target_x=RIM.cx)  # steeper than any real jump shot
+    shots = analyze_frames(frames, FPS, cfg)
+    assert len(shots) == 1
+    assert shots[0].launch_angle_deg is None
+
+
+def test_trimming_keeps_the_only_points_after_the_apex(cfg):
+    """Ball mostly lost on the way down: the couple of descending detections left must
+    not be thrown away as outliers, or the arc can't be measured at all."""
+    frames, rel = shot_frames(target_x=RIM.cx)
+    balls = [f for f in frames if f.ball is not None and f.idx > rel]
+    apex = min(balls, key=lambda f: f.ball.cy).idx
+    descending = [f for f in balls if apex + 3 < f.idx and f.ball.cy < rim_plane(RIM) - 20]
+    keep = {descending[len(descending) // 3].idx, descending[2 * len(descending) // 3].idx}
+    for f in descending:
+        if f.idx not in keep:
+            f.ball = None
+    f = next(f for f in frames if f.idx == max(keep))
+    f.ball = Box(f.ball.x1 + 33, f.ball.y1, f.ball.x2 + 33, f.ball.y2)  # ~1.1 ball widths off
+    s = analyze_frames(frames, FPS, cfg)[0]
+    assert s.launch_angle_deg == pytest.approx(50, abs=3)
+
+
+def test_dump_tracks_is_json_ready(cfg):
+    import json
+
+    from tracker.pipeline import dump_tracks
+
+    frames, _ = shot_frames(target_x=RIM.cx)
+    shots = analyze_frames(frames, FPS, cfg)
+    d = json.loads(json.dumps(dump_tracks(frames, FPS, shots)))
+    s = d["shots"][0]
+    assert d["fps"] == FPS and s["made"] is True
+    assert s["frames"]["cross"] >= s["frames"]["first_cross"] >= s["frames"]["up"]
+    assert len(s["ball"]) > 50 and len(s["ball"][0]) == 6

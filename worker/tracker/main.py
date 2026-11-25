@@ -15,13 +15,15 @@ import traceback
 from pathlib import Path
 
 from .config import Config
-from .pipeline import analyze_frames, shot_row
+from .pipeline import analyze_frames, dump_tracks, shot_row
 
 VIDEO_EXT = {".mp4", ".mov", ".m4v", ".mkv", ".avi"}
 log = logging.getLogger("tracker")
 
 
-def process_file(path: Path, cfg: Config, detector, *, save: bool = True, debug: bool = False) -> list[dict]:
+def process_file(
+    path: Path, cfg: Config, detector, *, save: bool = True, debug: bool = False, tracks: bool = False
+) -> list[dict]:
     from . import media
 
     t0 = time.time()
@@ -37,6 +39,13 @@ def process_file(path: Path, cfg: Config, detector, *, save: bool = True, debug:
             rel = Path("clips") / path.stem / f"{s.number:03d}_{'make' if s.made else 'miss'}.mp4"
             if media.make_clip(path, start, end, cfg.video_root / rel):
                 row["clip_path"] = str(rel)
+
+    if tracks:
+        base = cfg.debug if cfg.video_root.exists() else path.parent / "debug"
+        base.mkdir(parents=True, exist_ok=True)
+        out = base / f"{path.stem}_tracks.json"
+        out.write_text(json.dumps(dump_tracks(frames, info.fps, shots)))
+        log.info("tracks -> %s", out)
 
     if debug or cfg.debug_video:
         # never write next to the input: a debug file in incoming/ would be picked up as a new session
@@ -102,6 +111,7 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("video", type=Path)
     p.add_argument("--debug", action="store_true", help="write an annotated video")
     p.add_argument("--no-db", action="store_true", help="print results as JSON instead of saving")
+    p.add_argument("--dump-tracks", action="store_true", help="save per-shot ball positions to debug/<name>_tracks.json")
     args = ap.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -113,7 +123,9 @@ def main(argv: list[str] | None = None) -> None:
 
         if args.no_db:
             cfg.make_clips = False
-        rows = process_file(args.video, cfg, Detector(cfg), save=not args.no_db, debug=args.debug)
+        rows = process_file(
+            args.video, cfg, Detector(cfg), save=not args.no_db, debug=args.debug, tracks=args.dump_tracks
+        )
         if args.no_db:
             json.dump(rows, sys.stdout, indent=2, default=str)
             print()

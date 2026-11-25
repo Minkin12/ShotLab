@@ -27,6 +27,10 @@ MIN_EACH_SIDE_OF_APEX = 2  # points on the way up AND on the way down
 MAX_RMS_BALL_WIDTHS = 0.5  # fit residual, in ball widths
 MAX_TRIM = 0.2  # may drop up to 20% of flight points as outliers...
 TRIM_ABOVE_BALL_WIDTHS = 1.0  # ...if they sit more than 1 ball width off the arc
+# physically plausible jump-shot arcs; anything outside is a bad fit, not a real shot
+LAUNCH_ANGLE_RANGE = (25.0, 75.0)  # degrees
+ENTRY_ANGLE_RANGE = (20.0, 80.0)  # degrees
+RELEASE_SPEED_RANGE = (2.5, 15.0)  # m/s
 
 TrackPoint = tuple[int, float, float, float]  # frame, cx, cy, ball width
 
@@ -230,13 +234,19 @@ def fit_flight(shot: Shot, fps: float) -> None:
     if len(pts) < MIN_FLIGHT_POINTS:
         return skip(f"{len(pts)} ball detections in flight, need {MIN_FLIGHT_POINTS}")
 
-    # drop the worst outliers one at a time
+    # drop the worst outliers one at a time - but never thin out the side of the
+    # apex (rising or falling) that is already down to its minimum number of points
     ball_w = float(np.median([p[3] for p in pts]))
     for _ in range(int(MAX_TRIM * len(pts))):
-        *_, resid = _fit(pts, fps, start)
+        _, (a2, a1, _), t, resid = _fit(pts, fps, start)
         worst = int(np.argmax(resid))
         if resid[worst] <= TRIM_ABOVE_BALL_WIDTHS * ball_w or len(pts) <= MIN_FLIGHT_POINTS:
             break
+        if a2 > 0:
+            t_apex = -a1 / (2 * a2)
+            side = t < t_apex if t[worst] < t_apex else t > t_apex
+            if int(side.sum()) <= MIN_EACH_SIDE_OF_APEX:
+                break
         pts.pop(worst)
 
     flight = max(end - start, 1)
@@ -273,7 +283,17 @@ def fit_flight(shot: Shot, fps: float) -> None:
     y_apex = a2 * t_apex**2 + a1 * t_apex + a0
     hvx = abs(vx) or 1e-6
 
-    shot.launch_angle_deg = round(math.degrees(math.atan2(-vy0, hvx)), 1)
-    shot.entry_angle_deg = round(math.degrees(math.atan2(vy_cross, hvx)), 1)
-    shot.release_speed_mps = round(math.hypot(vx, vy0) * scale, 2)
+    launch = math.degrees(math.atan2(-vy0, hvx))
+    entry = math.degrees(math.atan2(vy_cross, hvx))
+    speed = math.hypot(vx, vy0) * scale
+    if not (
+        LAUNCH_ANGLE_RANGE[0] <= launch <= LAUNCH_ANGLE_RANGE[1]
+        and ENTRY_ANGLE_RANGE[0] <= entry <= ENTRY_ANGLE_RANGE[1]
+        and RELEASE_SPEED_RANGE[0] <= speed <= RELEASE_SPEED_RANGE[1]
+    ):
+        return skip(f"implausible arc (launch {launch:.0f} deg, entry {entry:.0f} deg, {speed:.1f} m/s)")
+
+    shot.launch_angle_deg = round(launch, 1)
+    shot.entry_angle_deg = round(entry, 1)
+    shot.release_speed_mps = round(speed, 2)
     shot.apex_above_rim_m = round((rim_plane(shot.rim) - y_apex) * scale, 2)

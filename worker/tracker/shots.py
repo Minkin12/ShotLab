@@ -25,6 +25,8 @@ MIN_COVERAGE = 0.6  # detections must span >= 60% of the flight time
 MAX_GAP = 0.35  # no hole bigger than 35% of the flight time
 MIN_EACH_SIDE_OF_APEX = 2  # points on the way up AND on the way down
 MAX_RMS_BALL_WIDTHS = 0.5  # fit residual, in ball widths
+MAX_TRIM = 0.2  # may drop up to 20% of flight points as outliers...
+TRIM_ABOVE_BALL_WIDTHS = 1.0  # ...if they sit more than 1 ball width off the arc
 
 TrackPoint = tuple[int, float, float, float]  # frame, cx, cy, ball width
 
@@ -131,13 +133,14 @@ def _classify(
     track: list[TrackPoint], up_i: int, end_i: int, rim: Box, cfg: Config, number: int, fps: float
 ) -> Shot | None:
     plane = rim_plane(rim)
-    crossing = None
-    for a, b in zip(track[up_i:end_i], track[up_i + 1 : end_i + 1]):
-        if a[2] <= plane < b[2]:  # moving down through the rim plane
-            crossing = (a, b)
-    if crossing is None:
+    crossings = [
+        (a, b)
+        for a, b in zip(track[up_i:end_i], track[up_i + 1 : end_i + 1])
+        if a[2] <= plane < b[2]  # moving down through the rim plane
+    ]
+    if not crossings:
         return None
-    a, b = crossing
+    a, b = crossings[-1]  # last crossing decides make/miss (after any rim bounces)
     frac = (plane - a[2]) / (b[2] - a[2])
     x_cross = a[1] + frac * (b[1] - a[1])
     offset = abs(x_cross - rim.cx) / (rim.w / 2)
@@ -149,6 +152,11 @@ def _classify(
         number=number,
         up_frame=up_frame,
         cross_frame=b[0],
+        # end of free flight: first time the ball gets within half a ball width of
+        # the rim height (where it can first touch the rim)
+        first_cross_frame=next(
+            (p[0] for p in track[up_i : end_i + 1] if p[2] >= plane - 0.5 * p[3]), b[0]
+        ),
         end_frame=track[end_i][0],
         made=offset <= cfg.make_tolerance,
         rim=rim,
@@ -175,7 +183,8 @@ def flight_start(shot: Shot, fps: float) -> int:
     backwards one detection at a time while each earlier point still sits on
     the same parabola. The first point that doesn't is the ball in the hands.
     """
-    flight = [p for p in shot.track if shot.up_frame <= p[0] <= shot.cross_frame]
+    end = shot.first_cross_frame or shot.cross_frame
+    flight = [p for p in shot.track if shot.up_frame <= p[0] <= end]
     earlier = [p for p in shot.track if p[0] < shot.up_frame]
     if len(flight) < 4:
         return earlier[-1][0] if earlier else shot.up_frame
@@ -186,12 +195,24 @@ def flight_start(shot: Shot, fps: float) -> int:
     return flight[0][0]
 
 
-def fit_flight(shot: Shot, fps: float) -> None:
-    """Fit x(t) linear, y(t) quadratic from release to the rim crossing.
+def _fit(pts: list[TrackPoint], fps: float, start: int):
+    """x(t) linear, y(t) quadratic; t in seconds since release. Returns coeffs, t, residuals."""
+    t = (np.array([p[0] for p in pts], dtype=float) - start) / fps
+    x = np.array([p[1] for p in pts])
+    y = np.array([p[2] for p in pts])
+    cx = np.polyfit(t, x, 1)
+    cy = np.polyfit(t, y, 2)
+    resid = np.hypot(x - np.polyval(cx, t), y - np.polyval(cy, t))
+    return cx, cy, t, resid
 
-    Fills launch/entry angle, release speed and apex height - but only when the
-    track passes the quality gate below; otherwise they stay None (no number is
-    better than a wrong one in the dashboard). The reason is logged.
+
+def fit_flight(shot: Shot, fps: float) -> None:
+    """Fit the free flight: release -> first time the ball reaches the rim.
+
+    Rim bounces and rattles after that point aren't ballistic, so they are left
+    out. A few stray detections (ball half-hidden by a hand or the net) are
+    trimmed. Arc metrics are only filled in when what remains passes the
+    quality gate; otherwise they stay None and the reason is logged.
 
     Angles are true angles only if the camera looks at the shot side-on
     (perpendicular to the shooter->rim line); at other angles they are
@@ -200,7 +221,8 @@ def fit_flight(shot: Shot, fps: float) -> None:
     """
     start = shot.start_frame if shot.start_frame is not None else flight_start(shot, fps)
     shot.start_frame = start
-    pts = [p for p in shot.track if start <= p[0] <= shot.cross_frame]
+    end = shot.first_cross_frame or shot.cross_frame
+    pts = [p for p in shot.track if start <= p[0] <= end]
 
     def skip(reason: str) -> None:
         log.info("shot %d: arc metrics skipped (%s)", shot.number, reason)
@@ -208,7 +230,16 @@ def fit_flight(shot: Shot, fps: float) -> None:
     if len(pts) < MIN_FLIGHT_POINTS:
         return skip(f"{len(pts)} ball detections in flight, need {MIN_FLIGHT_POINTS}")
 
-    flight = max(shot.cross_frame - start, 1)
+    # drop the worst outliers one at a time
+    ball_w = float(np.median([p[3] for p in pts]))
+    for _ in range(int(MAX_TRIM * len(pts))):
+        *_, resid = _fit(pts, fps, start)
+        worst = int(np.argmax(resid))
+        if resid[worst] <= TRIM_ABOVE_BALL_WIDTHS * ball_w or len(pts) <= MIN_FLIGHT_POINTS:
+            break
+        pts.pop(worst)
+
+    flight = max(end - start, 1)
     frames_ = [p[0] for p in pts]
     coverage = (frames_[-1] - frames_[0]) / flight
     if coverage < MIN_COVERAGE:
@@ -217,13 +248,7 @@ def fit_flight(shot: Shot, fps: float) -> None:
     if gap > MAX_GAP:
         return skip(f"ball lost for {gap:.0%} of the flight")
 
-    f = np.array(frames_, dtype=float)
-    t = (f - f[0]) / fps
-    x = np.array([p[1] for p in pts])
-    y = np.array([p[2] for p in pts])
-
-    vx, bx = np.polyfit(t, x, 1)
-    a2, a1, a0 = np.polyfit(t, y, 2)
+    (vx, _), (a2, a1, a0), t, resid = _fit(pts, fps, start)
     ay = 2 * a2  # px/s^2, positive = downward
     if ay <= 0:
         return skip("track is not a ballistic arc")
@@ -233,8 +258,6 @@ def fit_flight(shot: Shot, fps: float) -> None:
     if min(up, down) < MIN_EACH_SIDE_OF_APEX:
         return skip(f"{up} points before the apex, {down} after")
 
-    ball_w = float(np.median([p[3] for p in pts]))
-    resid = np.hypot(x - (vx * t + bx), y - (a2 * t**2 + a1 * t + a0))
     rms = float(np.sqrt(np.mean(resid**2))) / max(ball_w, 1.0)
     if rms > MAX_RMS_BALL_WIDTHS:
         return skip(f"poor fit ({rms:.2f} ball widths off)")
@@ -245,9 +268,8 @@ def fit_flight(shot: Shot, fps: float) -> None:
         return skip("arc's gravity doesn't match the rim size")
     scale = grav_scale
 
-    vy0 = a1  # dy/dt at t=0 (negative = upward)
-    t_cross = t[-1]
-    vy_cross = 2 * a2 * t_cross + a1
+    vy0 = a1  # dy/dt at release (negative = upward)
+    vy_cross = 2 * a2 * t[-1] + a1
     y_apex = a2 * t_apex**2 + a1 * t_apex + a0
     hvx = abs(vx) or 1e-6
 

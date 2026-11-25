@@ -78,13 +78,14 @@ class VideoInfo:
 class Shot:
     number: int
     up_frame: int  # first frame the ball is above the rim
-    cross_frame: int  # frame where the ball crossed the rim plane going down
+    cross_frame: int  # frame where the ball crossed the rim plane going down (last time)
     end_frame: int  # first frame the ball is clearly below the rim
     made: bool
     rim: Box
     cross_offset: float  # |x at rim plane - rim centre| / (rim width / 2)
     # (frame, cx, cy, ball_w) from ~2 s before up_frame through end_frame
     track: list[tuple[int, float, float, float]] = field(default_factory=list)
+    first_cross_frame: int | None = None  # first time it reached rim height (end of free flight)
     start_frame: int | None = None  # start of free flight (release if known)
     release_frame: int | None = None
     # ball-flight metrics

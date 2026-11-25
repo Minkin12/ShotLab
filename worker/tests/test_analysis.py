@@ -8,7 +8,7 @@ from tracker.config import Config
 from tracker.form import joint_angle
 from tracker.frames import Box, FrameData
 from tracker.pipeline import analyze_frames, shot_row
-from tracker.shots import clean_track
+from tracker.shots import clean_track, rim_plane
 
 FPS = 60.0
 
@@ -137,6 +137,7 @@ def test_rim_box_including_net(cfg):
     assert len(shots) == 1 and shots[0].made
     assert shots[0].launch_angle_deg == pytest.approx(50, abs=2)
 
+
 def test_release_when_ball_lost_during_extension(cfg):
     """Ball detections drop out while the arm extends (motion blur): release must
     still land at full extension, not at the set point where the ball was last seen."""
@@ -186,3 +187,31 @@ def test_outlier_points_give_no_arc(cfg):
             f.ball = Box(f.ball.x1 + j[0], f.ball.y1 + j[1], f.ball.x2 + j[0], f.ball.y2 + j[1])
     s = analyze_frames(frames, FPS, cfg)[0]
     assert s.launch_angle_deg is None
+
+
+def test_rim_bounce_keeps_arc_and_scores_miss(cfg):
+    """Ball reaches the rim, bounces up and drops off the far side: the arc is measured
+    from the free flight only, and the last crossing (outside the rim) makes it a miss."""
+    frames, rel = shot_frames(target_x=RIM.x2 - 5)  # arrives on the back of the rim
+    plane = rim_plane(RIM)
+    balls = [f for f in frames if f.idx > rel and f.ball]
+    hit = next(b.idx for a, b in zip(balls, balls[1:]) if a.ball.cy <= plane < b.ball.cy)
+    by_idx = {f.idx: f for f in frames}
+    bx = RIM.x2 + 25  # bounces off behind the rim
+    for k, i in enumerate(range(hit, hit + 90)):
+        if i not in by_idx:
+            break
+        y = plane - 60 * math.sin(math.pi * k / 30) if k < 30 else plane + 12 * (k - 30)
+        by_idx[i].ball = None if y > 900 else Box(bx - 15, y - 15, bx + 15, y + 15)
+    s = analyze_frames(frames, FPS, cfg)[0]
+    assert not s.made
+    assert s.launch_angle_deg == pytest.approx(50, abs=2)
+
+
+def test_few_stray_detections_are_trimmed(cfg):
+    frames, rel = shot_frames(target_x=RIM.cx)
+    flight = [f for f in frames if f.ball is not None and rel < f.idx < rel + 50]
+    for f in flight[5:30:8]:  # 3-4 detections knocked well off the arc
+        f.ball = Box(f.ball.x1 + 45, f.ball.y1 - 45, f.ball.x2 + 45, f.ball.y2 - 45)
+    s = analyze_frames(frames, FPS, cfg)[0]
+    assert s.launch_angle_deg == pytest.approx(50, abs=2)

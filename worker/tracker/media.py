@@ -11,6 +11,7 @@ import cv2
 
 from .form import SIDES
 from .frames import FrameData, Shot, VideoInfo
+from .shots import RimModel, rim_plane
 
 log = logging.getLogger(__name__)
 
@@ -52,8 +53,16 @@ def clip_window(s: Shot, fps: float) -> tuple[float, float]:
     return start / fps - 1.5, s.end_frame / fps + 1.0
 
 
-def write_debug_video(info: VideoInfo, frames: list[FrameData], shots: list[Shot], out: Path) -> None:
-    """Overlay detections, pose, release point and running tally. Useful for tuning."""
+def write_debug_video(
+    info: VideoInfo, frames: list[FrameData], shots: list[Shot], out: Path, make_tolerance: float = 0.7
+) -> None:
+    """Overlay detections, pose, release point and running tally. Useful for tuning.
+
+    Rim overlay: orange box = raw detection in this frame. Cyan line = the rim
+    height the tracker uses (from the smoothed rim), with a green segment for
+    the make zone (MAKE_TOLERANCE) and a tick at the rim centre.
+    """
+    rims = RimModel(frames, info.fps)
     out.parent.mkdir(parents=True, exist_ok=True)
     cap = cv2.VideoCapture(info.path)
     vw = cv2.VideoWriter(str(out), cv2.VideoWriter_fourcc(*"mp4v"), info.fps, (info.width, info.height))
@@ -68,6 +77,13 @@ def write_debug_video(info: VideoInfo, frames: list[FrameData], shots: list[Shot
         if f.rim:
             r = f.rim
             cv2.rectangle(img, (int(r.x1), int(r.y1)), (int(r.x2), int(r.y2)), (0, 165, 255), 2)
+        sr = rims.at(f.idx)
+        if sr is not None:
+            y = int(round(rim_plane(sr)))
+            half = make_tolerance * sr.w / 2
+            cv2.line(img, (int(sr.x1), y), (int(sr.x2), y), (255, 255, 0), 1)  # rim height (cyan)
+            cv2.line(img, (int(sr.cx - half), y), (int(sr.cx + half), y), (0, 255, 0), 2)  # make zone
+            cv2.line(img, (int(sr.cx), y - 6), (int(sr.cx), y + 6), (255, 255, 0), 2)  # rim centre
         if f.ball:
             b = f.ball
             cv2.circle(img, (int(b.cx), int(b.cy)), int(b.w / 2), (255, 128, 0), 2)

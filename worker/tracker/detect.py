@@ -46,6 +46,7 @@ class Detector:
             )
         log.info("ball classes %s, rim classes %s", self.ball_ids, self.rim_ids)
         self.half = cfg.half and str(cfg.device).lower() != "cpu"
+        self.precision = {"quantize": 16} if self.half else {}
         log.info("inference: device=%s imgsz=%d fp16=%s", cfg.device, cfg.imgsz, self.half)
 
     def run(
@@ -77,7 +78,7 @@ class Detector:
         cfg = self.cfg
         r = self.obj.predict(
             img, conf=min(cfg.ball_conf, cfg.rim_conf), imgsz=cfg.imgsz, device=cfg.device,
-            half=self.half, verbose=False,
+            verbose=False, **self.precision,
         )[0]
         balls, rims = [], []
         for (x1, y1, x2, y2), c, k in zip(
@@ -99,7 +100,7 @@ class Detector:
     def _shooter(self, img: np.ndarray, ball: Box | None) -> Pose | None:
         cfg = self.cfg
         r = self.pose.predict(
-            img, conf=cfg.pose_conf, imgsz=cfg.imgsz, device=cfg.device, half=self.half, verbose=False
+            img, conf=cfg.pose_conf, imgsz=cfg.imgsz, device=cfg.device, verbose=False, **self.precision
         )[0]
         if r.keypoints is None or len(r.boxes) == 0:
             return None

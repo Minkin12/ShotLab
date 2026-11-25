@@ -15,7 +15,19 @@
   },
   "refresh": "",
   "templating": {
-    "list": []
+    "list": [
+      {
+        "name": "suspect",
+        "label": "Suspect exit speed (m/s)",
+        "type": "textbox",
+        "query": "1.8",
+        "current": {
+          "text": "1.8",
+          "value": "1.8"
+        },
+        "hide": 0
+      }
+    ]
   },
   "annotations": {
     "list": []
@@ -762,7 +774,7 @@
           "rawQuery": true,
           "editorMode": "code",
           "format": "table",
-          "rawSql": "SELECT shot_time AS \"time\",\n       CASE WHEN made THEN 'MAKE' ELSE 'miss' END AS \"result\",\n       launch_angle_deg AS \"launch\", entry_angle_deg AS \"entry\",\n       release_speed_mps AS \"speed m/s\", release_elbow_angle AS \"elbow\",\n       min_knee_angle AS \"knee\", dip_to_release_ms AS \"dip ms\",\n       torso_lean_deg AS \"lean\", form_confidence AS \"pose conf\",\n       clip_path AS \"clip\"\nFROM shots WHERE $__timeFilter(shot_time) ORDER BY shot_time DESC LIMIT 500"
+          "rawSql": "SELECT shot_time AS \"time\",\n       CASE WHEN made THEN 'MAKE' ELSE 'miss' END AS \"result\",\n       launch_angle_deg AS \"launch\", entry_angle_deg AS \"entry\",\n       release_speed_mps AS \"speed m/s\", release_elbow_angle AS \"elbow\",\n       min_knee_angle AS \"knee\", dip_to_release_ms AS \"dip ms\",\n       torso_lean_deg AS \"lean\", exit_speed_mps AS \"exit m/s\", form_confidence AS \"pose conf\",\n       clip_path AS \"clip\"\nFROM shots WHERE $__timeFilter(shot_time) ORDER BY shot_time DESC LIMIT 500"
         }
       ],
       "fieldConfig": {
@@ -806,6 +818,98 @@
           }
         ]
       },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 15,
+      "type": "stat",
+      "title": "Suspect makes",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "shotdb"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 44,
+        "w": 4,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "shotdb"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT count(*) FROM shots WHERE $__timeFilter(shot_time) AND made AND exit_speed_mps > ${suspect}"
+        }
+      ],
+      "description": "Makes where the ball dropped away from the rim faster than the suspect speed - possible rattle-outs or balls falling just in front of/behind the rim.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "none",
+        "graphMode": "none",
+        "textMode": "value"
+      }
+    },
+    {
+      "id": 16,
+      "type": "table",
+      "title": "Suspect makes (ball left the rim fast)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "shotdb"
+      },
+      "gridPos": {
+        "x": 4,
+        "y": 44,
+        "w": 20,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "shotdb"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT shot_time AS \"time\", s.video_file AS \"session\", sh.shot_number AS \"shot\",\n       exit_speed_mps AS \"exit m/s\", rim_offset AS \"rim offset\", clip_path AS \"clip\"\nFROM shots sh JOIN sessions s ON s.id = sh.session_id\nWHERE $__timeFilter(shot_time) AND made AND exit_speed_mps > ${suspect}\nORDER BY exit_speed_mps DESC"
+        }
+      ],
+      "description": "Check these clips. Real makes are slowed by the net (about 1 m/s); balls falling past the rim drop at about 2 m/s or more.",
       "options": {
         "showHeader": true,
         "cellHeight": "sm"

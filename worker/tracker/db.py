@@ -7,9 +7,16 @@ import psycopg
 
 from .frames import VideoInfo
 
+# Columns added after the first release; safe to run on every save.
+MIGRATIONS = [
+    "ALTER TABLE shots ADD COLUMN IF NOT EXISTS exit_speed_mps REAL",
+]
+
 
 def save_session(dsn: str, info: VideoInfo, video_file: str, started: datetime, rows: list[dict]) -> int:
     with psycopg.connect(dsn) as conn, conn.cursor() as cur:
+        for sql in MIGRATIONS:
+            cur.execute(sql)
         cur.execute("DELETE FROM sessions WHERE video_file = %s", (video_file,))
         cur.execute(
             """INSERT INTO sessions (video_file, recorded_at, fps, frame_count, duration_s)

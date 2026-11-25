@@ -31,6 +31,7 @@ TRIM_ABOVE_BALL_WIDTHS = 1.0  # ...if they sit more than 1 ball width off the ar
 LAUNCH_ANGLE_RANGE = (25.0, 75.0)  # degrees
 ENTRY_ANGLE_RANGE = (20.0, 80.0)  # degrees
 RELEASE_SPEED_RANGE = (2.5, 15.0)  # m/s
+EXIT_WINDOW_S = 0.2  # exit speed = fall speed over this long after the final rim crossing
 
 TrackPoint = tuple[int, float, float, float]  # frame, cx, cy, ball width
 
@@ -127,6 +128,15 @@ def detect_shots(frames: list[FrameData], fps: float, cfg: Config) -> list[Shot]
 
         shot = _classify(track, up_i, i, rim, cfg, len(shots) + 1, fps)
         if shot is not None:
+            shot.exit_speed_mps = exit_speed(track, shot.cross_frame, rim, fps)
+            limit = cfg.max_make_exit_speed
+            if shot.made and limit is not None and shot.exit_speed_mps is not None and shot.exit_speed_mps > limit:
+                shot.made = False
+                log.info(
+                    "shot %d: make overruled - ball left the rim at %.2f m/s (MAX_MAKE_EXIT_SPEED %.2f)",
+                    shot.number, shot.exit_speed_mps, limit,
+                )
+        if shot is not None:
             shots.append(shot)
         state, blocked_until = "idle", fi + cooldown
 
@@ -167,6 +177,22 @@ def _classify(
         cross_offset=round(offset, 3),
         track=window,
     )
+
+
+def exit_speed(track: list[TrackPoint], cross_frame: int, rim: Box, fps: float) -> float | None:
+    """Downward speed (m/s) of the ball in the EXIT_WINDOW_S after its final rim crossing.
+
+    Through the net the ball is slowed (about 1 m/s on the first test session);
+    a ball rattling out and dropping just in front of / behind the rim falls
+    freely (about 2+ m/s). Scale comes from the rim width.
+    """
+    hi = cross_frame + round(EXIT_WINDOW_S * fps)
+    pts = [p for p in track if cross_frame <= p[0] <= hi]
+    if len(pts) < 3:
+        return None
+    t = np.array([p[0] for p in pts], dtype=float) / fps
+    vy = np.polyfit(t, [p[2] for p in pts], 1)[0]  # px/s, positive = falling
+    return round(float(vy) * RIM_DIAMETER_M / max(rim.w, 1.0), 2)
 
 
 # --------------------------------------------------------------------------- #

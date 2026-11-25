@@ -33,9 +33,15 @@ class Config:
 
     # shot logic
     shooting_hand: str = field(default_factory=lambda: _env("SHOOTING_HAND", "auto"))  # auto|right|left
-    make_tolerance: float = field(default_factory=lambda: float(_env("MAKE_TOLERANCE", "0.7")))
+    make_tolerance: float = field(default_factory=lambda: float(_env("MAKE_TOLERANCE", "0.6")))
     max_flight_s: float = field(default_factory=lambda: float(_env("MAX_FLIGHT_S", "3.0")))
     shot_cooldown_s: float = field(default_factory=lambda: float(_env("SHOT_COOLDOWN_S", "0.5")))
+    # Experimental: score a "make" as a miss when the ball leaves the rim faster than
+    # this (m/s) - balls through the net are slowed, rattle-outs behind the rim aren't.
+    # Empty = off (exit speed is still measured and saved).
+    max_make_exit_speed: float | None = field(
+        default_factory=lambda: float(v) if (v := _env("MAX_MAKE_EXIT_SPEED", "").strip()) else None
+    )
 
     # files
     video_root: Path = field(default_factory=lambda: Path(_env("VIDEO_ROOT", "/videos")))

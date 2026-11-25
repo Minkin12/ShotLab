@@ -88,6 +88,7 @@ class Shot:
     first_cross_frame: int | None = None  # first time it reached rim height (end of free flight)
     start_frame: int | None = None  # start of free flight (release if known)
     release_frame: int | None = None
+    exit_speed_mps: float | None = None  # how fast the ball drops in the 0.2 s after the rim
     # ball-flight metrics
     launch_angle_deg: float | None = None
     entry_angle_deg: float | None = None

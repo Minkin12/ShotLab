@@ -54,7 +54,7 @@ def clip_window(s: Shot, fps: float) -> tuple[float, float]:
 
 
 def write_debug_video(
-    info: VideoInfo, frames: list[FrameData], shots: list[Shot], out: Path, make_tolerance: float = 0.7
+    info: VideoInfo, frames: list[FrameData], shots: list[Shot], out: Path, make_tolerance: float = 0.6
 ) -> None:
     """Overlay detections, pose, release point and running tally. Useful for tuning.
 

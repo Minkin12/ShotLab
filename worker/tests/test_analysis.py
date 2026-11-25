@@ -253,3 +253,38 @@ def test_dump_tracks_is_json_ready(cfg):
     assert d["fps"] == FPS and s["made"] is True
     assert s["frames"]["cross"] >= s["frames"]["first_cross"] >= s["frames"]["up"]
     assert len(s["ball"]) > 50 and len(s["ball"][0]) == 6
+
+
+def _slow_through_net(frames, speed_px_s=100.0):
+    """After the ball first drops below the rim height, make it sink slowly (net drag)."""
+    plane = rim_plane(RIM)
+    balls = [f for f in frames if f.ball is not None]
+    c = next(b.idx for a, b in zip(balls, balls[1:]) if a.ball.cy <= plane < b.ball.cy and b.ball.cy > 0)
+    x0, y0 = next(f.ball.cx for f in frames if f.idx == c), next(f.ball.cy for f in frames if f.idx == c)
+    for f in frames:
+        if f.idx >= c:
+            y = y0 + speed_px_s * (f.idx - c) / FPS
+            f.ball = Box(x0 - 15, y - 15, x0 + 15, y + 15)
+
+
+def test_exit_speed_is_measured_and_saved(cfg):
+    frames, _ = shot_frames(target_x=RIM.cx)  # synthetic ball falls freely through the "net"
+    s = analyze_frames(frames, FPS, cfg)[0]
+    assert s.exit_speed_mps is not None and s.exit_speed_mps > 3
+    assert shot_row(s, FPS)["exit_speed_mps"] == s.exit_speed_mps
+
+
+def test_fast_exit_overrules_make_only_when_enabled(cfg):
+    frames, _ = shot_frames(target_x=RIM.cx)
+    assert analyze_frames(frames, FPS, cfg)[0].made  # off by default
+    cfg.max_make_exit_speed = 1.95
+    assert not analyze_frames(frames, FPS, cfg)[0].made  # free fall past the rim -> miss
+
+
+def test_slow_exit_stays_a_make(cfg):
+    frames, _ = shot_frames(target_x=RIM.cx)
+    _slow_through_net(frames, speed_px_s=100.0)  # ~0.76 m/s at this scale
+    cfg.max_make_exit_speed = 1.95
+    s = analyze_frames(frames, FPS, cfg)[0]
+    assert s.made
+    assert s.exit_speed_mps == pytest.approx(100 * SCALE, abs=0.05)

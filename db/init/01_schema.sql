@@ -19,6 +19,7 @@ CREATE TABLE shots (
     video_offset_s        REAL,
     made                  BOOLEAN NOT NULL,
     rim_offset            REAL,      -- 0 = dead centre, 1 = at the rim edge (2D)
+    exit_speed_mps        REAL,      -- fall speed just below the rim; fast "makes" are suspect
 
     -- ball flight
     launch_angle_deg      REAL,

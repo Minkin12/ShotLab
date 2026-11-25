@@ -45,6 +45,8 @@ class Detector:
                 f"/ RIM_CLASSES={cfg.rim_classes}"
             )
         log.info("ball classes %s, rim classes %s", self.ball_ids, self.rim_ids)
+        self.half = cfg.half and str(cfg.device).lower() != "cpu"
+        log.info("inference: device=%s imgsz=%d fp16=%s", cfg.device, cfg.imgsz, self.half)
 
     def run(
         self, path: str, progress: Callable[[int, int], None] | None = None
@@ -74,7 +76,8 @@ class Detector:
     def _objects(self, img: np.ndarray, last_ball: Box | None) -> tuple[Box | None, Box | None]:
         cfg = self.cfg
         r = self.obj.predict(
-            img, conf=min(cfg.ball_conf, cfg.rim_conf), imgsz=cfg.imgsz, device=cfg.device, verbose=False
+            img, conf=min(cfg.ball_conf, cfg.rim_conf), imgsz=cfg.imgsz, device=cfg.device,
+            half=self.half, verbose=False,
         )[0]
         balls, rims = [], []
         for (x1, y1, x2, y2), c, k in zip(
@@ -95,7 +98,9 @@ class Detector:
 
     def _shooter(self, img: np.ndarray, ball: Box | None) -> Pose | None:
         cfg = self.cfg
-        r = self.pose.predict(img, conf=cfg.pose_conf, imgsz=cfg.imgsz, device=cfg.device, verbose=False)[0]
+        r = self.pose.predict(
+            img, conf=cfg.pose_conf, imgsz=cfg.imgsz, device=cfg.device, half=self.half, verbose=False
+        )[0]
         if r.keypoints is None or len(r.boxes) == 0:
             return None
         kpts = r.keypoints.data.cpu().numpy()  # (n, 17, 3)

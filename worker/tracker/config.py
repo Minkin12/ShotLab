@@ -30,6 +30,9 @@ class Config:
     pose_conf: float = field(default_factory=lambda: float(_env("POSE_CONF", "0.40")))
     device: str = field(default_factory=lambda: _env("DEVICE", "0"))  # "0" = first GPU, "cpu"
     imgsz: int = field(default_factory=lambda: int(_env("IMGSZ", "960")))
+    # FP16 inference: ~1.5-2x faster on NVIDIA GPUs with no meaningful accuracy loss.
+    # Ignored on CPU.
+    half: bool = field(default_factory=lambda: _bool("HALF", True))
 
     # shot logic
     shooting_hand: str = field(default_factory=lambda: _env("SHOOTING_HAND", "auto"))  # auto|right|left

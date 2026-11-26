@@ -2,6 +2,7 @@
 
   python -m tracker.main watch                     # poll VIDEO_ROOT/incoming forever
   python -m tracker.main process clip.mp4 --debug  # one file; --no-db prints JSON
+  python -m tracker.main score results.json truth.txt   # accuracy vs your own make/miss list
 """
 from __future__ import annotations
 
@@ -112,7 +113,25 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--debug", action="store_true", help="write an annotated video")
     p.add_argument("--no-db", action="store_true", help="print results as JSON instead of saving")
     p.add_argument("--dump-tracks", action="store_true", help="save per-shot ball positions to debug/<name>_tracks.json")
+    sc = sub.add_parser("score", help="compare results with your own make/miss list")
+    sc.add_argument("results", type=Path, help="JSON from 'process --no-db'")
+    sc.add_argument("truth", type=Path, help="make/miss list (see tracker/score.py for formats)")
+    sc.add_argument("--make-tolerance", type=float, help="re-score with this MAKE_TOLERANCE")
+    sc.add_argument("--max-exit-speed", type=float, help="re-score with this MAX_MAKE_EXIT_SPEED (m/s)")
+    sc.add_argument("--window", type=float, default=2.5, help="seconds allowed between a timed truth shot and a detection")
     args = ap.parse_args(argv)
+
+    if args.cmd == "score":
+        from .score import format_report, load_rows, parse_truth, rescore, score
+
+        rows = rescore(load_rows(args.results), args.make_tolerance, args.max_exit_speed)
+        settings = ", ".join(
+            f"{k}={v}" for k, v in (("make_tolerance", args.make_tolerance), ("max_exit_speed", args.max_exit_speed))
+            if v is not None
+        )
+        title = f"{args.results.name} vs {args.truth.name}" + (f"  (re-scored: {settings})" if settings else "")
+        print(format_report(score(rows, parse_truth(args.truth.read_text()), args.window), title))
+        return
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     cfg = Config()

@@ -4,7 +4,7 @@ from __future__ import annotations
 from .config import Config
 from .form import analyze_shot
 from .frames import FrameData, Shot
-from .shots import detect_shots, fit_flight, rim_plane
+from .shots import calibrate_flights, detect_shots, fit_flight, rim_plane
 
 
 def analyze_frames(frames: list[FrameData], fps: float, cfg: Config) -> list[Shot]:
@@ -13,6 +13,7 @@ def analyze_frames(frames: list[FrameData], fps: float, cfg: Config) -> list[Sho
     for s in shots:
         analyze_shot(by_idx, s, fps, cfg.shooting_hand)  # release + form
         fit_flight(s, fps)  # uses release as start when available
+    calibrate_flights(shots)  # metres from each arc's gravity, checked against the session
     return shots
 
 

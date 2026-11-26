@@ -158,6 +158,7 @@ def test_release_when_ball_lost_during_extension(cfg):
     assert s.form["release_elbow_angle"] > 160
 
 
+
 def test_sparse_flight_gives_no_arc(cfg):
     """Only a handful of in-flight detections: the shot is still counted, arc stays empty."""
     frames, rel = shot_frames(target_x=RIM.cx)
@@ -304,3 +305,37 @@ def test_free_flight_ends_after_the_apex_with_tall_rim_box(cfg):
     assert s.first_cross_frame > apex
     # measured at all is the point; the doubled ball makes the synthetic release a bit late
     assert s.launch_angle_deg == pytest.approx(50, abs=5)
+
+
+def _session(n_shots, stretch=None):
+    """n consecutive synthetic makes; stretch={shot_index: factor} exaggerates that shot's
+    vertical motion (as a bad fit would), which changes its apparent gravity."""
+    frames, start = [], 0
+    for k in range(n_shots):
+        fr, rel = shot_frames(target_x=RIM.cx, start=start)
+        if stretch and k in stretch:
+            y0 = next(f.ball.cy for f in fr if f.idx == rel)
+            for f in fr:
+                if f.ball is not None and f.idx > rel:
+                    dy = (f.ball.cy - y0) * (stretch[k] - 1)
+                    f.ball = Box(f.ball.x1, f.ball.y1 + dy, f.ball.x2, f.ball.y2 + dy)
+        frames += fr
+        start = fr[-1].idx + 40
+    return frames
+
+
+def test_session_scale_calibration(cfg):
+    from tracker.shots import calibrate_flights
+
+    shots = analyze_frames(_session(6), FPS, cfg)
+    assert len(shots) == 6 and all(s.release_speed_mps is not None for s in shots)
+    v_true = flight_speed(50, (RIM.cx, RIM.cy)) * SCALE
+    assert all(s.release_speed_mps == pytest.approx(v_true, rel=0.05) for s in shots)
+    assert calibrate_flights(shots) == pytest.approx(SCALE, rel=0.05)  # gravity agrees with the scene
+
+
+def test_shot_with_off_gravity_is_dropped_against_session(cfg):
+    shots = analyze_frames(_session(6, stretch={2: 2.2}), FPS, cfg)  # well outside the 1.6x band
+    assert len(shots) == 6
+    assert shots[2].launch_angle_deg is None and shots[2].release_speed_mps is None
+    assert all(s.release_speed_mps is not None for i, s in enumerate(shots) if i != 2)

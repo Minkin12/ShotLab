@@ -94,5 +94,8 @@ class Shot:
     entry_angle_deg: float | None = None
     release_speed_mps: float | None = None
     apex_above_rim_m: float | None = None
+    # raw fit in pixels {"ay": px/s^2, "v0": px/s, "apex": px above rim}; set by
+    # fit_flight, converted to metres by calibrate_flights once the session scale is known
+    flight_px: dict | None = None
     # form metrics (see form.py), keyed by DB column name
     form: dict = field(default_factory=dict)

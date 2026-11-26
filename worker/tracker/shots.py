@@ -32,6 +32,12 @@ LAUNCH_ANGLE_RANGE = (25.0, 75.0)  # degrees
 ENTRY_ANGLE_RANGE = (20.0, 80.0)  # degrees
 RELEASE_SPEED_RANGE = (2.5, 15.0)  # m/s
 EXIT_WINDOW_S = 0.2  # exit speed = fall speed over this long after the final rim crossing
+# Session gravity check: within a session, the metres-per-pixel that gravity implies is
+# similar for every shot, varying only with the shot's distance from the camera. A shot whose
+# own value is far from the session's median is a bad fit, not a real arc. (The rim and ball
+# boxes are no use as rulers: the model draws both ~1.5x bigger than the real objects.)
+MIN_CALIBRATION_SHOTS = 5
+GRAVITY_TOLERANCE = 0.6  # own scale within 1/1.6x .. 1.6x of the median (distance varies)
 
 TrackPoint = tuple[int, float, float, float]  # frame, cx, cy, ball width
 
@@ -244,13 +250,14 @@ def fit_flight(shot: Shot, fps: float) -> None:
 
     Rim bounces and rattles after that point aren't ballistic, so they are left
     out. A few stray detections (ball half-hidden by a hand or the net) are
-    trimmed. Arc metrics are only filled in when what remains passes the
-    quality gate; otherwise they stay None and the reason is logged.
+    trimmed. Launch/entry angles are only filled in when what remains passes the
+    quality gate; otherwise they stay None and the reason is logged. Speed and
+    apex height need the session's pixel scale and are filled in afterwards by
+    calibrate_flights (from the raw values left in shot.flight_px).
 
     Angles are true angles only if the camera looks at the shot side-on
     (perpendicular to the shooter->rim line); at other angles they are
-    consistent but inflated. Metres per pixel comes from gravity (fitted
-    vertical acceleration), checked against the rim width.
+    consistent but inflated.
     """
     start = shot.start_frame if shot.start_frame is not None else flight_start(shot, fps)
     shot.start_frame = start
@@ -301,28 +308,64 @@ def fit_flight(shot: Shot, fps: float) -> None:
     if rms > MAX_RMS_BALL_WIDTHS:
         return skip(f"poor fit ({rms:.2f} ball widths off)")
 
-    rim_scale = RIM_DIAMETER_M / max(shot.rim.w, 1.0)
-    grav_scale = G / ay
-    if not 0.5 * rim_scale <= grav_scale <= 2.0 * rim_scale:
-        return skip("arc's gravity doesn't match the rim size")
-    scale = grav_scale
-
     vy0 = a1  # dy/dt at release (negative = upward)
     vy_cross = 2 * a2 * t[-1] + a1
     y_apex = a2 * t_apex**2 + a1 * t_apex + a0
     hvx = abs(vx) or 1e-6
 
+    # angles don't depend on the pixel scale; speed and apex height do (see calibrate_flights)
     launch = math.degrees(math.atan2(-vy0, hvx))
     entry = math.degrees(math.atan2(vy_cross, hvx))
-    speed = math.hypot(vx, vy0) * scale
     if not (
         LAUNCH_ANGLE_RANGE[0] <= launch <= LAUNCH_ANGLE_RANGE[1]
         and ENTRY_ANGLE_RANGE[0] <= entry <= ENTRY_ANGLE_RANGE[1]
-        and RELEASE_SPEED_RANGE[0] <= speed <= RELEASE_SPEED_RANGE[1]
     ):
-        return skip(f"implausible arc (launch {launch:.0f} deg, entry {entry:.0f} deg, {speed:.1f} m/s)")
+        return skip(f"implausible arc (launch {launch:.0f} deg, entry {entry:.0f} deg)")
 
     shot.launch_angle_deg = round(launch, 1)
     shot.entry_angle_deg = round(entry, 1)
-    shot.release_speed_mps = round(speed, 2)
-    shot.apex_above_rim_m = round((rim_plane(shot.rim) - y_apex) * scale, 2)
+    shot.flight_px = {"ay": float(ay), "v0": float(math.hypot(vx, vy0)), "apex": float(rim_plane(shot.rim) - y_apex)}
+
+
+def _clear_flight(shot: Shot, reason: str) -> None:
+    log.info("shot %d: arc metrics skipped (%s)", shot.number, reason)
+    shot.launch_angle_deg = shot.entry_angle_deg = None
+    shot.release_speed_mps = shot.apex_above_rim_m = None
+    shot.flight_px = None
+
+
+def calibrate_flights(shots: list[Shot]) -> float | None:
+    """Turn each fitted arc's pixel values into metres and sanity-check its gravity.
+
+    Each shot uses its own gravity-based scale (G / fitted vertical acceleration):
+    that is measured where the ball actually flew, so it is right even when shots
+    are taken at different distances from the camera. The check compares it with
+    the session median (with at least MIN_CALIBRATION_SHOTS arcs), otherwise with
+    the rim width as before. Returns the session median scale (m/px) or None.
+    """
+    fitted = [s for s in shots if s.flight_px]
+    own = {s.number: G / s.flight_px["ay"] for s in fitted}
+    session = float(np.median(list(own.values()))) if len(fitted) >= MIN_CALIBRATION_SHOTS else None
+    if session is not None:
+        log.info("session scale: 1 px = %.1f mm (gravity, median of %d arcs)", session * 1000, len(fitted))
+
+    for s in fitted:
+        scale = own[s.number]
+        if session is not None:
+            ratio = scale / session
+            if not 1 / (1 + GRAVITY_TOLERANCE) <= ratio <= 1 + GRAVITY_TOLERANCE:
+                _clear_flight(s, f"arc's gravity is {ratio:.2f}x the session's")
+                continue
+        else:
+            rim_scale = RIM_DIAMETER_M / max(s.rim.w, 1.0)
+            if not 0.5 * rim_scale <= scale <= 2.0 * rim_scale:
+                _clear_flight(s, "arc's gravity doesn't match the rim size")
+                continue
+
+        speed = s.flight_px["v0"] * scale
+        if not RELEASE_SPEED_RANGE[0] <= speed <= RELEASE_SPEED_RANGE[1]:
+            _clear_flight(s, f"implausible release speed ({speed:.1f} m/s)")
+            continue
+        s.release_speed_mps = round(speed, 2)
+        s.apex_above_rim_m = round(s.flight_px["apex"] * scale, 2)
+    return session

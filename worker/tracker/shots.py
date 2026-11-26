@@ -162,15 +162,18 @@ def _classify(
     up_frame = track[up_i][0]
     lo = up_frame - int(2 * fps)
     window = [p for p in track[: end_i + 1] if p[0] >= lo]
+    # end of free flight: first time, AFTER the top of the arc, that the ball gets
+    # within half a ball width of the rim height (where it can first touch the rim).
+    # Searching only after the apex matters: on the way up the ball passes the same
+    # height, and with a tall rim(+net) box that is right where the shot starts.
+    seg = track[up_i : end_i + 1]
+    apex = min(range(len(seg)), key=lambda k: seg[k][2])
+    first_reach = next((p[0] for p in seg[apex:] if p[2] >= plane - 0.5 * p[3]), b[0])
     return Shot(
         number=number,
         up_frame=up_frame,
         cross_frame=b[0],
-        # end of free flight: first time the ball gets within half a ball width of
-        # the rim height (where it can first touch the rim)
-        first_cross_frame=next(
-            (p[0] for p in track[up_i : end_i + 1] if p[2] >= plane - 0.5 * p[3]), b[0]
-        ),
+        first_cross_frame=first_reach,
         end_frame=track[end_i][0],
         made=offset <= cfg.make_tolerance,
         rim=rim,

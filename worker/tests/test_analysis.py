@@ -288,3 +288,19 @@ def test_slow_exit_stays_a_make(cfg):
     s = analyze_frames(frames, FPS, cfg)[0]
     assert s.made
     assert s.exit_speed_mps == pytest.approx(100 * SCALE, abs=0.05)
+
+
+def test_free_flight_ends_after_the_apex_with_tall_rim_box(cfg):
+    """Real models box rim+net and see a big ball: the ball passes 'near rim height' on
+    the way UP. The free flight must still end on the way down, or the arc can't be fit."""
+    tall = Box(RIM.x1, RIM.y1, RIM.x2, RIM.y1 + 75)
+    frames, _ = shot_frames(target_x=RIM.cx)
+    for f in frames:
+        f.rim = tall
+        if f.ball is not None:  # ball twice as big on screen
+            f.ball = Box(f.ball.cx - 30, f.ball.cy - 30, f.ball.cx + 30, f.ball.cy + 30)
+    s = analyze_frames(frames, FPS, cfg)[0]
+    apex = min((f for f in frames if f.ball and s.up_frame <= f.idx <= s.cross_frame), key=lambda f: f.ball.cy).idx
+    assert s.first_cross_frame > apex
+    # measured at all is the point; the doubled ball makes the synthetic release a bit late
+    assert s.launch_angle_deg == pytest.approx(50, abs=5)

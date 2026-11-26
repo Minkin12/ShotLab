@@ -3,6 +3,7 @@
   python -m tracker.main watch                     # poll VIDEO_ROOT/incoming forever
   python -m tracker.main process clip.mp4 --debug  # one file; --no-db prints JSON
   python -m tracker.main score results.json truth.txt   # accuracy vs your own make/miss list
+  python -m tracker.main crops video.mov tracks.json truth.txt --out DIR --split train
 """
 from __future__ import annotations
 
@@ -119,7 +120,23 @@ def main(argv: list[str] | None = None) -> None:
     sc.add_argument("--make-tolerance", type=float, help="re-score with this MAKE_TOLERANCE")
     sc.add_argument("--max-exit-speed", type=float, help="re-score with this MAX_MAKE_EXIT_SPEED (m/s)")
     sc.add_argument("--window", type=float, default=2.5, help="seconds allowed between a timed truth shot and a detection")
+    cr = sub.add_parser("crops", help="export labeled rim images for the make/miss classifier")
+    cr.add_argument("video", type=Path)
+    cr.add_argument("tracks", type=Path, help="JSON from 'process --dump-tracks'")
+    cr.add_argument("truth", type=Path, help="make/miss list (same formats as score)")
+    cr.add_argument("--out", type=Path, required=True, help="dataset folder, e.g. /models/datasets/makecls")
+    cr.add_argument("--split", default="train", choices=["train", "val"])
+    cr.add_argument("--preview", action="store_true", help="also write viewable strips to OUT/preview/")
     args = ap.parse_args(argv)
+
+    if args.cmd == "crops":
+        from .crops import export_crops
+
+        logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+        c = export_crops(args.video, args.tracks, args.truth, args.out, args.split, args.preview)
+        print(f"{args.video.name} -> {args.out / args.split}: {c['make']} make, {c['miss']} miss"
+              + (f", {c['skipped']} skipped (crop outside video)" if c["skipped"] else ""))
+        return
 
     if args.cmd == "score":
         from .score import format_report, load_rows, parse_truth, rescore, score

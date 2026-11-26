@@ -45,6 +45,11 @@ class Config:
     max_make_exit_speed: float | None = field(
         default_factory=lambda: float(v) if (v := _env("MAX_MAKE_EXIT_SPEED", "").strip()) else None
     )
+    # Make/miss classifier (YOLO classify model trained on `tracker crops` images). Empty = off.
+    make_classifier: str | None = field(default_factory=lambda: _env("MAKE_CLASSIFIER", "").strip() or None)
+    make_classifier_threshold: float = field(
+        default_factory=lambda: float(_env("MAKE_CLASSIFIER_THRESHOLD", "0.8"))
+    )
 
     # files
     video_root: Path = field(default_factory=lambda: Path(_env("VIDEO_ROOT", "/videos")))

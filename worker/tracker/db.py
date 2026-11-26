@@ -10,6 +10,7 @@ from .frames import VideoInfo
 # Columns added after the first release; safe to run on every save.
 MIGRATIONS = [
     "ALTER TABLE shots ADD COLUMN IF NOT EXISTS exit_speed_mps REAL",
+    "ALTER TABLE shots ADD COLUMN IF NOT EXISTS make_prob REAL",
 ]
 
 

@@ -64,6 +64,42 @@ def preview_strip(crops: list[np.ndarray], label: str) -> np.ndarray:
     return strip
 
 
+def collect_rim_crops(
+    video: Path, specs: list[tuple[int, list[float], float, int]], fps: float
+) -> dict[int, list[np.ndarray | None]]:
+    """For each (shot number, rim box [x1,y1,x2,y2], rim plane y, final crossing frame),
+    the rim crops at STACK_TIMES_S around the crossing. One sequential pass over the
+    video, which is more reliable than seeking in phone videos."""
+    cap = cv2.VideoCapture(str(video))
+    if not cap.isOpened():
+        raise RuntimeError(f"cannot open video {video}")
+    width, height = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    n_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+    want: dict[int, list[tuple[int, int]]] = {}  # frame -> [(shot, slot)]
+    boxes = {}
+    for num, rim, plane_y, cross in specs:
+        boxes[num] = crop_box(rim, plane_y, width, height)
+        for slot, dt in enumerate(STACK_TIMES_S):
+            fi = min(max(cross + round(dt * fps), 0), max(n_frames - 1, 0))
+            want.setdefault(fi, []).append((num, slot))
+
+    got: dict[int, list[np.ndarray | None]] = {num: [None] * len(STACK_TIMES_S) for num, *_ in specs}
+    last = max(want) if want else -1
+    idx = 0
+    while idx <= last:
+        if not cap.grab():
+            break
+        if idx in want:
+            _, img = cap.retrieve()
+            for num, slot in want[idx]:
+                x1, y1, x2, y2 = boxes[num]
+                got[num][slot] = img[y1:y2, x1:x2].copy()
+        idx += 1
+    cap.release()
+    return got
+
+
 def _rows_from_tracks(tracks: dict) -> list[dict]:
     fps = tracks["fps"]
     rows = []
@@ -85,37 +121,8 @@ def export_crops(
         log.warning(n)
     labels = {p.row["shot_number"]: ("make" if p.truth.made else "miss") for p in rep.pairs if p.truth and p.row}
 
-    cap = cv2.VideoCapture(str(video))
-    if not cap.isOpened():
-        raise RuntimeError(f"cannot open video {video}")
-    width, height = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    n_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-
-    # which frames we need, and the crop box for each shot
-    want: dict[int, list[tuple[int, int]]] = {}  # frame -> [(shot, slot)]
-    boxes = {}
-    for num in labels:
-        s = shots[num]
-        boxes[num] = crop_box(s["rim"], s["rim_plane_y"], width, height)
-        for slot, dt in enumerate(STACK_TIMES_S):
-            fi = min(max(s["frames"]["cross"] + round(dt * fps), 0), max(n_frames - 1, 0))
-            want.setdefault(fi, []).append((num, slot))
-
-    # one sequential pass (more reliable than seeking in phone videos)
-    got: dict[int, list[np.ndarray | None]] = {num: [None] * len(STACK_TIMES_S) for num in labels}
-    last = max(want) if want else -1
-    idx = 0
-    while idx <= last:
-        ok = cap.grab()
-        if not ok:
-            break
-        if idx in want:
-            _, img = cap.retrieve()
-            for num, slot in want[idx]:
-                x1, y1, x2, y2 = boxes[num]
-                got[num][slot] = img[y1:y2, x1:x2].copy()
-        idx += 1
-    cap.release()
+    specs = [(num, shots[num]["rim"], shots[num]["rim_plane_y"], shots[num]["frames"]["cross"]) for num in labels]
+    got = collect_rim_crops(video, specs, fps)
 
     counts = {"make": 0, "miss": 0, "skipped": 0}
     stem = video.stem

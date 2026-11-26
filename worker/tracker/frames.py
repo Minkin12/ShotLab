@@ -89,6 +89,7 @@ class Shot:
     start_frame: int | None = None  # start of free flight (release if known)
     release_frame: int | None = None
     exit_speed_mps: float | None = None  # how fast the ball drops in the 0.2 s after the rim
+    make_prob: float | None = None  # make/miss classifier's probability of a make (if enabled)
     # ball-flight metrics
     launch_angle_deg: float | None = None
     entry_angle_deg: float | None = None

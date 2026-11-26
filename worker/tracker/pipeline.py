@@ -26,6 +26,7 @@ def shot_row(s: Shot, fps: float) -> dict:
         "made": s.made,
         "rim_offset": s.cross_offset,
         "exit_speed_mps": s.exit_speed_mps,
+        "make_prob": s.make_prob,
         "launch_angle_deg": s.launch_angle_deg,
         "entry_angle_deg": s.entry_angle_deg,
         "release_speed_mps": s.release_speed_mps,
@@ -67,6 +68,7 @@ def dump_tracks(frames: list[FrameData], fps: float, shots: list[Shot]) -> dict:
             "made": bool(s.made),
             "rim_offset": s.cross_offset,
             "exit_speed_mps": s.exit_speed_mps,
+            "make_prob": s.make_prob,
             "rim": [round(v, 1) for v in (r.x1, r.y1, r.x2, r.y2)],
             "rim_plane_y": round(rim_plane(r), 1),
             "frames": {

@@ -136,6 +136,25 @@ UPDATE shots SET tags = '{free-throw}' WHERE session_id = 12;
 
 You can then filter any dashboard panel with `AND 'free-throw' = ANY(tags)`.
 
+## 7b. Make/miss classifier (optional)
+
+From the side, a ball rattling out or dropping just behind the rim can look like a make.
+A small image classifier fixes most of these: it looks at the rim just before and after
+the ball's final crossing (the net snapping on a make is the strongest clue).
+
+1. Mark sessions by hand (`truth.txt`, same formats as `score`) and process them with `--dump-tracks`.
+2. Export training images, one session held out for validation:
+   ```bash
+   docker compose run --rm --no-deps tracker crops /videos/processed/<video> \
+     /videos/debug/<video>_tracks.json /videos/debug/<video>_truth.txt --out /models/datasets/makecls --split train --preview
+   ```
+3. Train: `yolo classify train model=yolo11n-cls.pt data=/models/datasets/makecls imgsz=224 epochs=50 batch=32`
+4. Copy `best.pt` to `models/make_cls.pt` and set `MAKE_CLASSIFIER=/models/make_cls.pt` in `.env`.
+
+Every shot then gets `make_prob`; a make whose p(miss) is above `MAKE_CLASSIFIER_THRESHOLD`
+(default 0.8) is scored a miss and logged. Shots already scored a miss are never changed.
+Retrain as you mark more sessions.
+
 ## 8. Ideas for later
 
 - **Shot chart:** map court lines to pixel positions (a homography) to plot where each shot came from and get percentages by zone.
@@ -153,5 +172,3 @@ cd worker && pip install numpy pytest && PYTHONPATH=. pytest tests
 The tests generate synthetic shots (a ballistic ball flight and a shooter with a knee dip) and check make/miss, launch angle, release speed, release frame, hand detection and knee bend. They also add realistic detection noise and dropped frames.
 
 Note: `ultralytics` is licensed AGPL-3.0. That's fine for a personal homelab project.
-
-Ball/rim model trained on datasets listed in models/DATASETS.md

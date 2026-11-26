@@ -23,8 +23,17 @@ VIDEO_EXT = {".mp4", ".mov", ".m4v", ".mkv", ".avi"}
 log = logging.getLogger("tracker")
 
 
+def load_classifier(cfg: Config):
+    if not cfg.make_classifier:
+        return None
+    from .classify import MakeClassifier
+
+    return MakeClassifier(cfg)
+
+
 def process_file(
-    path: Path, cfg: Config, detector, *, save: bool = True, debug: bool = False, tracks: bool = False
+    path: Path, cfg: Config, detector, *, save: bool = True, debug: bool = False, tracks: bool = False,
+    classifier=None,
 ) -> list[dict]:
     from . import media
 
@@ -33,6 +42,10 @@ def process_file(
         str(path), progress=lambda i, n: log.info("  %s: frame %d/%d", path.name, i, n)
     )
     shots = analyze_frames(frames, info.fps, cfg)
+    if classifier is not None:
+        from .classify import apply_classifier
+
+        apply_classifier(path, shots, info.fps, cfg.make_classifier_threshold, classifier)
     rows = [shot_row(s, info.fps) for s in shots]
 
     if cfg.make_clips and save:
@@ -81,6 +94,7 @@ def watch(cfg: Config) -> None:
     for d in (cfg.incoming, cfg.processed, cfg.failed, cfg.clips):
         d.mkdir(parents=True, exist_ok=True)
     detector = Detector(cfg)
+    classifier = load_classifier(cfg)
     sizes: dict[Path, int] = {}
     log.info("watching %s every %.0fs", cfg.incoming, cfg.poll_seconds)
     # Polling instead of inotify: inotify doesn't fire on NFS/SMB mounts from a NAS.
@@ -96,7 +110,7 @@ def watch(cfg: Config) -> None:
             sizes.pop(path, None)
             log.info("processing %s", path.name)
             try:
-                process_file(path, cfg, detector)
+                process_file(path, cfg, detector, classifier=classifier)
                 shutil.move(str(path), cfg.processed / path.name)
             except Exception:  # noqa: BLE001 - keep the watcher alive
                 log.error("failed on %s", path.name, exc_info=True)
@@ -160,7 +174,8 @@ def main(argv: list[str] | None = None) -> None:
         if args.no_db:
             cfg.make_clips = False
         rows = process_file(
-            args.video, cfg, Detector(cfg), save=not args.no_db, debug=args.debug, tracks=args.dump_tracks
+            args.video, cfg, Detector(cfg), save=not args.no_db, debug=args.debug, tracks=args.dump_tracks,
+            classifier=load_classifier(cfg),
         )
         if args.no_db:
             json.dump(rows, sys.stdout, indent=2, default=str)

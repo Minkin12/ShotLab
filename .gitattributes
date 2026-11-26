@@ -1,1 +1,2 @@
 models/ball_rim.pt filter=lfs diff=lfs merge=lfs -text
+models/*.pt filter=lfs diff=lfs merge=lfs -text

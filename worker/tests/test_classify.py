@@ -28,10 +28,10 @@ def _video(tmp_path):
     return path
 
 
-def _shot(n, made, cross):
+def _shot(n, made, cross, offset=None):
     rim = Box(370, 100, 430, 160)
     return Shot(number=n, up_frame=cross - 10, cross_frame=cross, end_frame=cross + 5, made=made,
-                rim=rim, cross_offset=0.1 if made else 2.0)
+                rim=rim, cross_offset=offset if offset is not None else (0.1 if made else 2.0))
 
 
 def test_classifier_overrules_only_confident_makes(tmp_path):
@@ -53,3 +53,11 @@ def test_no_shots_no_work(tmp_path):
     clf = FakeClassifier([])
     apply_classifier(_video(tmp_path), [], FPS, 0.8, clf)
     assert clf.seen == []
+
+
+def test_rescue_only_confident_near_misses(tmp_path):
+    shots = [_shot(1, False, 20, offset=0.7), _shot(2, False, 50, offset=0.7),
+             _shot(3, False, 80, offset=1.5), _shot(4, False, 110, offset=0.3)]  # 4: exit-speed style miss
+    clf = FakeClassifier([0.02, 0.2, 0.01, 0.01])
+    apply_classifier(_video(tmp_path), shots, FPS, 0.6, clf, make_tolerance=0.6, rescue=0.95, rescue_max_offset=0.9)
+    assert [s.made for s in shots] == [True, False, False, False]

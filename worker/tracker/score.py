@@ -13,6 +13,10 @@ truth.txt     your own make/miss list, in order. Any of these work:
 --make-tolerance / --max-exit-speed re-score the same results with different
 settings (from rim_offset / exit_speed_mps), so you can try values without
 re-processing the video.
+
+--classifier-threshold / --rescue also replay the make/miss classifier from the saved
+make_prob. Replaying starts again from the geometry, so --make-tolerance and
+--max-exit-speed default to 0.6 and 3.0 there; pass them if your .env differs.
 """
 from __future__ import annotations
 
@@ -93,10 +97,29 @@ def load_rows(path: Path) -> list[dict]:
     return json.loads(text[start:] if start > 0 else text)
 
 
-def rescore(rows: list[dict], make_tolerance: float | None, max_exit_speed: float | None) -> list[dict]:
-    """Recompute 'made' with other settings, from the saved rim_offset / exit_speed_mps."""
-    if make_tolerance is None and max_exit_speed is None:
+def rescore(
+    rows: list[dict],
+    make_tolerance: float | None,
+    max_exit_speed: float | None,
+    classifier_threshold: float | None = None,
+    rescue: float | None = None,
+    rescue_offset: float = 0.9,
+) -> list[dict]:
+    """Recompute 'made' with other settings, from the saved rim_offset / exit_speed_mps / make_prob.
+
+    With classifier_threshold or rescue the classifier is replayed after the geometry and
+    exit-speed rules, exactly as processing does it.
+    """
+    replay = classifier_threshold is not None or rescue is not None
+    if make_tolerance is None and max_exit_speed is None and not replay:
         return rows
+    if replay:
+        from .classify import verdict
+
+        if make_tolerance is None:
+            raise ValueError("replaying the classifier needs make_tolerance")
+        if classifier_threshold is None:
+            classifier_threshold = 1.0  # rescue only: never overrule
     out = []
     for r in rows:
         r = dict(r)
@@ -105,6 +128,10 @@ def rescore(rows: list[dict], make_tolerance: float | None, max_exit_speed: floa
             made = r["rim_offset"] <= make_tolerance
         if max_exit_speed is not None and made and (r.get("exit_speed_mps") or 0) > max_exit_speed:
             made = False
+        if replay:
+            # the exit-speed rule wins: rescue only near-misses by geometry (verdict checks rim_offset)
+            made, _ = verdict(made, r.get("rim_offset"), r.get("make_prob"), classifier_threshold,
+                              make_tolerance, rescue, rescue_offset)
         r["made"] = made
         out.append(r)
     return out

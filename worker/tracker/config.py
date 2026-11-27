@@ -50,6 +50,14 @@ class Config:
     make_classifier_threshold: float = field(
         default_factory=lambda: float(_env("MAKE_CLASSIFIER_THRESHOLD", "0.8"))
     )
+    # Rescue near-misses (rim_offset between MAKE_TOLERANCE and MAKE_CLASSIFIER_RESCUE_OFFSET)
+    # when make_prob is at least this. Empty = off.
+    make_classifier_rescue: float | None = field(
+        default_factory=lambda: float(v) if (v := _env("MAKE_CLASSIFIER_RESCUE", "").strip()) else None
+    )
+    make_classifier_rescue_offset: float = field(
+        default_factory=lambda: float(_env("MAKE_CLASSIFIER_RESCUE_OFFSET", "0.9"))
+    )
 
     # files
     video_root: Path = field(default_factory=lambda: Path(_env("VIDEO_ROOT", "/videos")))

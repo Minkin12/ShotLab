@@ -45,7 +45,11 @@ def process_file(
     if classifier is not None:
         from .classify import apply_classifier
 
-        apply_classifier(path, shots, info.fps, cfg.make_classifier_threshold, classifier)
+        apply_classifier(
+            path, shots, info.fps, cfg.make_classifier_threshold, classifier,
+            make_tolerance=cfg.make_tolerance, rescue=cfg.make_classifier_rescue,
+            rescue_max_offset=cfg.make_classifier_rescue_offset,
+        )
     rows = [shot_row(s, info.fps) for s in shots]
 
     if cfg.make_clips and save:
@@ -133,6 +137,10 @@ def main(argv: list[str] | None = None) -> None:
     sc.add_argument("truth", type=Path, help="make/miss list (see tracker/score.py for formats)")
     sc.add_argument("--make-tolerance", type=float, help="re-score with this MAKE_TOLERANCE")
     sc.add_argument("--max-exit-speed", type=float, help="re-score with this MAX_MAKE_EXIT_SPEED (m/s)")
+    sc.add_argument("--classifier-threshold", type=float,
+                    help="replay the classifier from saved make_prob with this MAKE_CLASSIFIER_THRESHOLD")
+    sc.add_argument("--rescue", type=float, help="replay with this MAKE_CLASSIFIER_RESCUE")
+    sc.add_argument("--rescue-offset", type=float, default=0.9, help="MAKE_CLASSIFIER_RESCUE_OFFSET for --rescue")
     sc.add_argument("--window", type=float, default=2.5, help="seconds allowed between a timed truth shot and a detection")
     cr = sub.add_parser("crops", help="export labeled rim images for the make/miss classifier")
     cr.add_argument("video", type=Path)
@@ -155,9 +163,22 @@ def main(argv: list[str] | None = None) -> None:
     if args.cmd == "score":
         from .score import format_report, load_rows, parse_truth, rescore, score
 
-        rows = rescore(load_rows(args.results), args.make_tolerance, args.max_exit_speed)
+        tol, mes = args.make_tolerance, args.max_exit_speed
+        replay = args.classifier_threshold is not None or args.rescue is not None
+        if replay:  # rebuild from geometry, so it needs the base settings (defaults match .env.example)
+            tol = 0.6 if tol is None else tol
+            mes = 3.0 if mes is None else mes
+        rows = rescore(
+            load_rows(args.results), tol, mes,
+            classifier_threshold=args.classifier_threshold if replay else None,
+            rescue=args.rescue, rescue_offset=args.rescue_offset,
+        )
         settings = ", ".join(
-            f"{k}={v}" for k, v in (("make_tolerance", args.make_tolerance), ("max_exit_speed", args.max_exit_speed))
+            f"{k}={v}" for k, v in (
+                ("make_tolerance", tol), ("max_exit_speed", mes),
+                ("classifier_threshold", args.classifier_threshold if replay else None),
+                ("rescue", args.rescue), ("rescue_offset", args.rescue_offset if args.rescue is not None else None),
+            )
             if v is not None
         )
         title = f"{args.results.name} vs {args.truth.name}" + (f"  (re-scored: {settings})" if settings else "")

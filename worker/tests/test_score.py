@@ -6,8 +6,9 @@ from tracker.main import main
 from tracker.score import format_report, parse_truth, rescore, score
 
 
-def row(n, made, t=None, off=None, exit_=None, arc=None):
+def row(n, made, t=None, off=None, exit_=None, arc=None, prob=None):
     return {
+        "make_prob": prob,
         "shot_number": n, "made": made, "video_offset_s": t if t is not None else 10.0 * n,
         "rim_offset": off if off is not None else (0.1 if made else 2.0),
         "exit_speed_mps": exit_, "launch_angle_deg": arc, "release_elbow_angle": 150.0,
@@ -52,6 +53,30 @@ def test_rescore_with_new_settings():
     new = rescore(rows, make_tolerance=0.6, max_exit_speed=2.0)
     assert [r["made"] for r in new] == [False, False, True]
     assert [r["made"] for r in rows] == [True, True, False]  # originals untouched
+
+
+def test_rescore_replays_classifier():
+    rows = [
+        row(1, True, off=0.1, prob=0.59),             # weak make -> overruled at threshold 0.4
+        row(2, True, off=0.1, prob=0.9),              # confident make stays
+        row(3, False, off=0.7, prob=0.98),            # near-miss, confident -> rescued
+        row(4, False, off=1.2, prob=0.99),            # too far out: never rescued
+        row(5, False, off=0.1, exit_=4.0, prob=0.99), # exit-speed miss stays a miss
+        row(6, False, off=0.7, prob=0.9),             # not confident enough to rescue
+    ]
+    new = rescore(rows, 0.6, 3.0, classifier_threshold=0.4, rescue=0.95, rescue_offset=0.9)
+    assert [r["made"] for r in new] == [False, True, True, False, False, False]
+    only_rescue = rescore(rows, 0.6, 3.0, rescue=0.95)
+    assert [r["made"] for r in only_rescue] == [True, True, True, False, False, False]
+
+
+def test_cli_replay_title(tmp_path, capsys):
+    res, tru = tmp_path / "s.json", tmp_path / "truth.txt"
+    res.write_text(json.dumps([row(1, True, prob=0.5), row(2, False, off=0.7, prob=0.99)]))
+    tru.write_text("miss make\n")
+    main(["score", str(res), str(tru), "--classifier-threshold", "0.4", "--rescue", "0.95"])
+    out = capsys.readouterr().out
+    assert "2/2 correct" in out and "classifier_threshold=0.4" in out and "make_tolerance=0.6" in out
 
 
 def test_exit_speed_verdict():

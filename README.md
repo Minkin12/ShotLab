@@ -152,7 +152,25 @@ the ball's final crossing (the net snapping on a make is the strongest clue).
 4. Copy `best.pt` to `models/make_cls.pt` and set `MAKE_CLASSIFIER=/models/make_cls.pt` in `.env`.
 
 Every shot then gets `make_prob`; a make whose p(miss) is above `MAKE_CLASSIFIER_THRESHOLD`
-(default 0.8) is scored a miss and logged. Shots already scored a miss are never changed.
+(default 0.8) is scored a miss and logged.
+
+**Rescue (optional):** with `MAKE_CLASSIFIER_RESCUE=0.95`, a near-miss - the ball came down
+through the rim plane just outside `MAKE_TOLERANCE`, with `rim_offset` up to
+`MAKE_CLASSIFIER_RESCUE_OFFSET` (default 0.9) - is scored a make when `make_prob` is at least
+0.95. Clear misses and exit-speed misses are never changed.
+
+**Trying settings without re-processing:** `score` can replay the classifier from the saved
+`make_prob`:
+
+```bash
+docker compose run --rm --no-deps tracker score /videos/debug/<results>.json /videos/debug/<truth>.txt \
+  --classifier-threshold 0.4 --rescue 0.95
+```
+
+Replaying starts again from the geometry, so `--make-tolerance` and `--max-exit-speed` default
+to 0.6 and 3.0; pass them if your `.env` differs. Only trust the numbers on a session the model
+**wasn't trained on** - on its own training sessions the classifier is overconfident.
+
 Retrain as you mark more sessions.
 
 ## 8. Ideas for later

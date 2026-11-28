@@ -61,6 +61,11 @@ def write_debug_video(
     Rim overlay: orange box = raw detection in this frame. Cyan line = the rim
     height the tracker uses (from the smoothed rim), with a green segment for
     the make zone (MAKE_TOLERANCE) and a tick at the rim centre.
+
+    Arc overlay, from release until the result banner goes: the fitted flight in
+    yellow (measured) or red (skipped - the reason is in the banner), white dots
+    on the detections the fit used, and an X where free flight ended (first rim
+    contact).
     """
     rims = RimModel(frames, info.fps)
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -70,6 +75,8 @@ def write_debug_video(
     releases = {s.release_frame: s for s in shots if s.release_frame is not None}
     makes = attempts = 0
     banner, banner_until = "", -1
+    arcs = [(s, _arc_points(s, info.fps)) for s in shots if s.arc_fit]
+    show_until = {s.number: s.end_frame + int(1.5 * info.fps) for s in shots}
     for f in frames:
         ok, img = cap.read()
         if not ok:
@@ -92,6 +99,9 @@ def write_debug_video(
             for a, c in SKELETON:
                 if k[a][2] > 0.3 and k[c][2] > 0.3:
                     cv2.line(img, (int(k[a][0]), int(k[a][1])), (int(k[c][0]), int(k[c][1])), (0, 255, 0), 2)
+        for s, (curve, used, end_pt) in arcs:
+            if s.arc_fit["start"] <= f.idx <= show_until[s.number]:
+                _draw_arc(img, s, curve, used, end_pt, f.idx)
         if f.idx in releases:
             s = releases[f.idx]
             hand = s.form.get("shooting_hand")
@@ -104,7 +114,9 @@ def write_debug_video(
             s = by_end[f.idx]
             attempts += 1
             makes += int(s.made)
-            banner = f"{'MAKE' if s.made else 'MISS'}  arc {s.launch_angle_deg}  entry {s.entry_angle_deg}"
+            arc = (f"arc {s.launch_angle_deg}  entry {s.entry_angle_deg}" if s.launch_angle_deg is not None
+                   else f"arc skipped: {s.arc_note or 'no fit'}")
+            banner = f"{'MAKE' if s.made else 'MISS'}  {arc}"
             banner_until = f.idx + int(1.5 * info.fps)
         cv2.putText(img, f"{makes}/{attempts}", (30, 60), cv2.FONT_HERSHEY_SIMPLEX, 1.8, (255, 255, 255), 4)
         if f.idx <= banner_until:
@@ -112,3 +124,32 @@ def write_debug_video(
         vw.write(img)
     cap.release()
     vw.release()
+
+
+def _arc_points(s: Shot, fps: float):
+    """Pixel points of a shot's fitted arc: (curve, used detections, end of free flight)."""
+    import numpy as np
+
+    a = s.arc_fit
+    cx, cy = np.array(a["cx"]), np.array(a["cy"])
+
+    def at(frame: float) -> tuple[int, int]:
+        t = (frame - a["start"]) / fps
+        return int(round(np.polyval(cx, t))), int(round(np.polyval(cy, t)))
+
+    steps = max(int(a["end"] - a["start"]), 1)
+    curve = np.array([at(a["start"] + k * (a["end"] - a["start"]) / steps) for k in range(steps + 1)], np.int32)
+    by_frame = {p[0]: p for p in s.track}
+    used = [(int(by_frame[i][1]), int(by_frame[i][2])) for i in a["used"] if i in by_frame]
+    return curve, used, at(a["end"])
+
+
+def _draw_arc(img, s: Shot, curve, used, end_pt, idx: int) -> None:
+    colour = (0, 255, 255) if s.arc_fit["ok"] else (0, 0, 255)  # yellow / red (BGR)
+    cv2.polylines(img, [curve], False, colour, 2, cv2.LINE_AA)
+    for i, (x, y) in zip(s.arc_fit["used"], used):
+        if i <= idx:  # dots appear as the ball gets there
+            cv2.circle(img, (x, y), 3, (255, 255, 255), -1)
+    x, y = end_pt
+    cv2.line(img, (x - 9, y - 9), (x + 9, y + 9), colour, 2)
+    cv2.line(img, (x - 9, y + 9), (x + 9, y - 9), colour, 2)

@@ -313,6 +313,9 @@ def fit_flight(shot: Shot, fps: float) -> None:
 
     def skip(reason: str) -> None:
         log.info("shot %d: arc metrics skipped (%s)", shot.number, reason)
+        shot.arc_note = reason
+        if shot.arc_fit is not None:
+            shot.arc_fit["ok"] = False
 
     if len(pts) < MIN_FLIGHT_POINTS:
         return skip(f"{len(pts)} ball detections in flight, need {MIN_FLIGHT_POINTS}")
@@ -341,7 +344,10 @@ def fit_flight(shot: Shot, fps: float) -> None:
     if gap > MAX_GAP:
         return skip(f"ball lost for {gap:.0%} of the flight")
 
-    (vx, _), (a2, a1, a0), t, resid = _fit(pts, fps, start)
+    cx_fit, cy_fit, t, resid = _fit(pts, fps, start)
+    (vx, _), (a2, a1, a0) = cx_fit, cy_fit
+    shot.arc_fit = {"start": start, "end": end, "cx": [float(c) for c in cx_fit],
+                    "cy": [float(a2), float(a1), float(a0)], "used": [p[0] for p in pts], "ok": True}
     ay = 2 * a2  # px/s^2, positive = downward
     if ay <= 0:
         return skip("track is not a ballistic arc")
@@ -376,6 +382,9 @@ def fit_flight(shot: Shot, fps: float) -> None:
 
 def _clear_flight(shot: Shot, reason: str) -> None:
     log.info("shot %d: arc metrics skipped (%s)", shot.number, reason)
+    shot.arc_note = reason
+    if shot.arc_fit is not None:
+        shot.arc_fit["ok"] = False
     shot.launch_angle_deg = shot.entry_angle_deg = None
     shot.release_speed_mps = shot.apex_above_rim_m = None
     shot.flight_px = None

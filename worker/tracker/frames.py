@@ -98,5 +98,10 @@ class Shot:
     # raw fit in pixels {"ay": px/s^2, "v0": px/s, "apex": px above rim}; set by
     # fit_flight, converted to metres by calibrate_flights once the session scale is known
     flight_px: dict | None = None
+    # the fitted arc, kept for the debug video: {"start", "end": frames, "cx", "cy": polynomial
+    # coefficients in px vs seconds since start, "used": frames of the detections in the fit,
+    # "ok": False if the arc metrics were skipped}; arc_note says why they were skipped
+    arc_fit: dict | None = None
+    arc_note: str | None = None
     # form metrics (see form.py), keyed by DB column name
     form: dict = field(default_factory=dict)

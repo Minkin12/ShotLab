@@ -220,6 +220,23 @@ def _num(r: dict, k: str) -> str:
     return "-" if v is None else f"{v:g}"
 
 
+def report_counts(rep: Report) -> dict:
+    """The headline numbers of a report, for tables and the database."""
+    paired = [p for p in rep.pairs if p.truth and p.row]
+    return {
+        "actual": len(rep.truth),
+        "detected": len(rep.rows),
+        "missed": sum(1 for p in rep.pairs if p.truth and not p.row),
+        "extra": sum(1 for p in rep.pairs if p.row and not p.truth),
+        "paired": len(paired),
+        "correct": sum(p.truth.made == bool(p.row["made"]) for p in paired),
+        "false_makes": sum(bool(p.row["made"]) and not p.truth.made for p in paired),
+        "false_misses": sum(not p.row["made"] and p.truth.made for p in paired),
+        "actual_makes": sum(t.made for t in rep.truth),
+        "arc_measured": sum(r.get("launch_angle_deg") is not None for r in rep.rows),
+    }
+
+
 def format_report(rep: Report, title: str = "") -> str:
     paired = [p for p in rep.pairs if p.truth and p.row]
     missed = [p for p in rep.pairs if p.truth and not p.row]

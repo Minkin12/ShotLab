@@ -64,6 +64,8 @@ class Config:
     poll_seconds: float = field(default_factory=lambda: float(_env("POLL_SECONDS", "15")))
     make_clips: bool = field(default_factory=lambda: _bool("MAKE_CLIPS", True))
     debug_video: bool = field(default_factory=lambda: _bool("DEBUG_VIDEO", False))
+    # watcher saves debug/<video>_tracks.json for every session (needed by `eval --export-crops`)
+    save_tracks: bool = field(default_factory=lambda: _bool("SAVE_TRACKS", True))
 
     # database
     database_url: str = field(

@@ -914,6 +914,86 @@
         "showHeader": true,
         "cellHeight": "sm"
       }
+    },
+    {
+      "id": 17,
+      "type": "table",
+      "title": "Accuracy (reviewed sessions)",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "shotdb"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 52,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "shotdb"
+          },
+          "rawQuery": true,
+          "editorMode": "code",
+          "format": "table",
+          "rawSql": "SELECT s.recorded_at AS \"recorded\", s.video_file AS \"session\",\n       sc.detected || '/' || sc.actual AS \"shots found\",\n       round(100.0 * sc.correct / nullif(sc.paired, 0), 1) AS \"make/miss correct %\",\n       sc.false_makes AS \"false makes\", sc.false_misses AS \"false misses\",\n       round(100.0 * sc.actual_makes / nullif(sc.actual, 0), 1) AS \"real FG %\",\n       round(100.0 * sc.arc_measured / nullif(sc.detected, 0), 1) AS \"arc measured %\",\n       CASE WHEN sc.trained_on THEN 'yes' ELSE '' END AS \"classifier trained on it\",\n       sc.scored_at AS \"scored\"\nFROM session_scores sc JOIN sessions s ON s.id = sc.session_id\nWHERE $__timeFilter(s.recorded_at)\nORDER BY s.recorded_at DESC"
+        }
+      ],
+      "description": "Written by `tracker eval` for every session with a truth file. Sessions the make/miss classifier was trained on look better than new footage will.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "make/miss correct %"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 90
+                    },
+                    {
+                      "color": "green",
+                      "value": 97
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
     }
   ]
 }

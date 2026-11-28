@@ -4,6 +4,7 @@
   python -m tracker.main process clip.mp4 --debug  # one file; --no-db prints JSON
   python -m tracker.main score results.json truth.txt   # accuracy vs your own make/miss list
   python -m tracker.main crops video.mov tracks.json truth.txt --out DIR --split train
+  python -m tracker.main eval [--details] [--export-crops]   # score every reviewed session
 """
 from __future__ import annotations
 
@@ -114,13 +115,17 @@ def watch(cfg: Config) -> None:
             sizes.pop(path, None)
             log.info("processing %s", path.name)
             try:
-                process_file(path, cfg, detector, classifier=classifier)
+                process_file(path, cfg, detector, tracks=cfg.save_tracks, classifier=classifier)
                 shutil.move(str(path), cfg.processed / path.name)
             except Exception:  # noqa: BLE001 - keep the watcher alive
                 log.error("failed on %s", path.name, exc_info=True)
                 shutil.move(str(path), cfg.failed / path.name)
                 (cfg.failed / f"{path.name}.log").write_text(traceback.format_exc())
         time.sleep(cfg.poll_seconds)
+
+
+def _float_or_off(v: str) -> float | None:
+    return None if v.strip().lower() in {"off", "none", ""} else float(v)
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -149,7 +154,37 @@ def main(argv: list[str] | None = None) -> None:
     cr.add_argument("--out", type=Path, required=True, help="dataset folder, e.g. /models/datasets/makecls")
     cr.add_argument("--split", default="train", choices=["train", "val"])
     cr.add_argument("--preview", action="store_true", help="also write viewable strips to OUT/preview/")
+    ev = sub.add_parser("eval", help="score every session that has a debug/<video>_truth.txt")
+    ev.add_argument("--details", action="store_true", help="also list each session's problem shots")
+    ev.add_argument("--export-crops", action="store_true",
+                    help="(re-)export classifier training images for new or corrected truth files")
+    ev.add_argument("--dataset", type=Path, default=Path("/models/datasets/makecls_all"),
+                    help="classifier dataset for --export-crops and the 'trained on' check")
+    ev.add_argument("--no-save", action="store_true", help="don't save the scores to the database")
+    ev.add_argument("--no-db", action="store_true", help="only use <video>.json results in the debug folder")
+    ev.add_argument("--make-tolerance", type=float, help="try this MAKE_TOLERANCE instead of .env's")
+    ev.add_argument("--max-exit-speed", type=_float_or_off, default=argparse.SUPPRESS, help="m/s, or 'off'")
+    ev.add_argument("--classifier-threshold", type=_float_or_off, default=argparse.SUPPRESS, help="p(miss), or 'off'")
+    ev.add_argument("--rescue", type=_float_or_off, default=argparse.SUPPRESS, help="make_prob, or 'off'")
+    ev.add_argument("--rescue-offset", type=float)
+    ev.add_argument("sessions", nargs="*", help="only these videos (name or name without extension)")
     args = ap.parse_args(argv)
+
+    if args.cmd == "eval":
+        from .evaluate import Settings, run
+
+        logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(message)s")
+        cfg = Config()
+        st = Settings.from_config(cfg)
+        for name in ("make_tolerance", "max_exit_speed", "classifier_threshold", "rescue", "rescue_offset"):
+            v = getattr(args, name, "keep")
+            if v is not None and v != "keep":
+                setattr(st, name, v)
+            elif v is None and name in ("max_exit_speed", "classifier_threshold", "rescue"):
+                setattr(st, name, None)  # 'off'
+        print(run(cfg, st, details=args.details, save=not args.no_save, export=args.export_crops,
+                  dataset=args.dataset, only=args.sessions or None, use_db=not args.no_db))
+        return
 
     if args.cmd == "crops":
         from .crops import export_crops

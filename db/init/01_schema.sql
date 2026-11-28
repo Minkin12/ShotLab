@@ -41,10 +41,22 @@ CREATE TABLE shots (
 
     clip_path             TEXT,
     tags                  TEXT[],    -- e.g. {free-throw, corner-3}; set by hand
+    truth_made            BOOLEAN,   -- what really happened, from your truth file (tracker eval)
     UNIQUE (session_id, shot_number)
 );
 
 CREATE INDEX shots_time_idx ON shots (shot_time);
+
+-- Accuracy of each reviewed session, written by `tracker eval`
+CREATE TABLE session_scores (
+    session_id   INTEGER PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,
+    scored_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    settings     JSONB,
+    actual       INTEGER, detected INTEGER, missed INTEGER, extra INTEGER,
+    paired       INTEGER, correct INTEGER, false_makes INTEGER, false_misses INTEGER,
+    actual_makes INTEGER, arc_measured INTEGER,
+    trained_on   BOOLEAN   -- the make/miss classifier was trained on this session
+);
 
 -- One row per session
 CREATE VIEW session_summary AS

@@ -86,6 +86,37 @@ This prints every detected shot as JSON and writes `debug/test_debug.mp4`. That 
 | Wrong hand detected | Set `SHOOTING_HAND=right` or `left` |
 | Form metrics empty | The pose wasn't visible enough. Check `form_confidence` and move the camera closer or side-on |
 
+### Checking accuracy: `tracker eval`
+
+Upload right after a session; review it whenever you like:
+
+1. Write what really happened to `debug/<video name>_truth.txt` (for `form_shooting_2026-11-27_1217.mov`
+   that's `form_shooting_2026-11-27_1217_truth.txt`). One `make`/`miss` per shot, in order, or
+   `1:13.5 make` lines with times - same formats as `score`.
+2. Run:
+   ```bash
+   docker compose run --rm --no-deps tracker eval
+   ```
+
+That scores every session that has a truth file, from what the watcher saved - nothing is
+re-processed - and prints one table, plus an "honest" total over sessions the classifier
+wasn't trained on. Scores and each shot's real result (`shots.truth_made`) go to the database
+for the Grafana **Accuracy** panel; the app's own make/miss is never changed.
+
+| Option | What it does |
+|---|---|
+| `--details` | also lists each session's problem shots |
+| `--export-crops` | (re-)exports classifier training images for sessions with a new or corrected truth file; then retrain (7b) |
+| `--max-exit-speed off`, `--classifier-threshold 0.6`, `--rescue 0.95`, `--make-tolerance 0.5` | try a setting on every reviewed session before putting it in `.env` |
+| `IMG_6208 shoot_around` | only these sessions |
+| `--no-save` | don't write to the database |
+
+Results are re-scored with your current `.env`. Values measured during processing (arc,
+`rim_offset`, the classifier's `make_prob`) are whatever the code and model were then -
+re-process a session (move it back to `incoming/`) to refresh them, then run `eval` again.
+The watcher saves each session's ball tracks to `debug/<video>_tracks.json`
+(`SAVE_TRACKS=true`), which `--export-crops` needs.
+
 ## 5. What the numbers mean
 
 These are all 2D measurements from the camera's point of view. Compare **your makes with your misses** rather than with textbook numbers. The "Form: makes vs misses" table on the dashboard shows exactly that.

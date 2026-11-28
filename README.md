@@ -154,10 +154,11 @@ the ball's final crossing (the net snapping on a make is the strongest clue).
 Every shot then gets `make_prob`; a make whose p(miss) is above `MAKE_CLASSIFIER_THRESHOLD`
 (default 0.8) is scored a miss and logged.
 
-**Rescue (optional):** with `MAKE_CLASSIFIER_RESCUE=0.95`, a near-miss - the ball came down
-through the rim plane just outside `MAKE_TOLERANCE`, with `rim_offset` up to
-`MAKE_CLASSIFIER_RESCUE_OFFSET` (default 0.9) - is scored a make when `make_prob` is at least
-0.95. Clear misses and exit-speed misses are never changed.
+**Rescue (optional):** with `MAKE_CLASSIFIER_RESCUE=0.95`, a miss whose `rim_offset` is at most
+`MAKE_CLASSIFIER_RESCUE_OFFSET` (default 0.9) is scored a make when `make_prob` is at least
+0.95. That covers near-misses just outside `MAKE_TOLERANCE`, and makes the exit-speed rule
+overruled (a fast "exit" is sometimes the tracker jumping to a hand or another ball under the
+rim). Clear misses are never changed.
 
 **Trying settings without re-processing:** `score` can replay the classifier from the saved
 `make_prob`:

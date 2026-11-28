@@ -129,7 +129,7 @@ def rescore(
         if max_exit_speed is not None and made and (r.get("exit_speed_mps") or 0) > max_exit_speed:
             made = False
         if replay:
-            # the exit-speed rule wins: rescue only near-misses by geometry (verdict checks rim_offset)
+            # rescue can undo the exit-speed rule too, as in processing
             made, _ = verdict(made, r.get("rim_offset"), r.get("make_prob"), classifier_threshold,
                               make_tolerance, rescue, rescue_offset)
         r["made"] = made

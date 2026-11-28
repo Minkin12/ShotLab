@@ -61,13 +61,15 @@ def test_rescore_replays_classifier():
         row(2, True, off=0.1, prob=0.9),              # confident make stays
         row(3, False, off=0.7, prob=0.98),            # near-miss, confident -> rescued
         row(4, False, off=1.2, prob=0.99),            # too far out: never rescued
-        row(5, False, off=0.1, exit_=4.0, prob=0.99), # exit-speed miss stays a miss
+        row(5, False, off=0.1, exit_=4.0, prob=0.99), # exit-speed miss, confident make -> undone
         row(6, False, off=0.7, prob=0.9),             # not confident enough to rescue
     ]
     new = rescore(rows, 0.6, 3.0, classifier_threshold=0.4, rescue=0.95, rescue_offset=0.9)
-    assert [r["made"] for r in new] == [False, True, True, False, False, False]
+    assert [r["made"] for r in new] == [False, True, True, False, True, False]
     only_rescue = rescore(rows, 0.6, 3.0, rescue=0.95)
-    assert [r["made"] for r in only_rescue] == [True, True, True, False, False, False]
+    assert [r["made"] for r in only_rescue] == [True, True, True, False, True, False]
+    no_rescue = rescore(rows, 0.6, 3.0, classifier_threshold=0.4)
+    assert [r["made"] for r in no_rescue][4] is False  # exit rule stands without rescue
 
 
 def test_cli_replay_title(tmp_path, capsys):

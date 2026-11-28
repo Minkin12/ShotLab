@@ -50,8 +50,8 @@ class Config:
     make_classifier_threshold: float = field(
         default_factory=lambda: float(_env("MAKE_CLASSIFIER_THRESHOLD", "0.8"))
     )
-    # Rescue near-misses (rim_offset between MAKE_TOLERANCE and MAKE_CLASSIFIER_RESCUE_OFFSET)
-    # when make_prob is at least this. Empty = off.
+    # Score a miss a make when make_prob is at least this and rim_offset is within
+    # MAKE_CLASSIFIER_RESCUE_OFFSET (near-misses, and makes the exit-speed rule overruled). Empty = off.
     make_classifier_rescue: float | None = field(
         default_factory=lambda: float(v) if (v := _env("MAKE_CLASSIFIER_RESCUE", "").strip()) else None
     )

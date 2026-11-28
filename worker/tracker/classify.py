@@ -4,10 +4,11 @@ The model is a YOLO classification model trained on `tracker crops` images (clas
 'make' and 'miss'). For every shot it gives make_prob; a "make" whose p(miss) is above
 MAKE_CLASSIFIER_THRESHOLD is scored a miss.
 
-Optional rescue (MAKE_CLASSIFIER_RESCUE): a near-miss - the ball came down through the
-rim plane just outside MAKE_TOLERANCE, but within MAKE_CLASSIFIER_RESCUE_OFFSET - is
-scored a make when make_prob is at least the rescue value. Clear misses and misses from
-the exit-speed rule are never changed.
+Optional rescue (MAKE_CLASSIFIER_RESCUE): a miss is scored a make when make_prob is at
+least the rescue value and the ball came down through the rim plane within
+MAKE_CLASSIFIER_RESCUE_OFFSET of the centre. That covers near-misses just outside
+MAKE_TOLERANCE, and makes the exit-speed rule overruled (it can be fooled when the
+tracker jumps to something else under the rim). Clear misses are never changed.
 """
 from __future__ import annotations
 
@@ -78,10 +79,11 @@ def verdict(
         not made
         and rescue is not None
         and rim_offset is not None
-        and make_tolerance < rim_offset <= rescue_max_offset
+        and rim_offset <= rescue_max_offset
         and make_prob >= rescue
     ):
-        return True, "rescued"
+        # inside the tolerance it was only a miss because of the exit-speed rule
+        return True, "exit rule undone" if rim_offset <= make_tolerance else "rescued"
     return made, None
 
 
@@ -96,7 +98,7 @@ def apply_classifier(
     rescue_max_offset: float = 0.9,
 ) -> None:
     """Sets shot.make_prob for every shot, overrules makes the classifier is sure were misses
-    and, if `rescue` is set, rescues near-misses it is sure were makes.
+    and, if `rescue` is set, rescues misses near the rim it is sure were makes.
 
     `clf` is anything with a p_miss(list of images) -> list of floats method.
     """
@@ -111,6 +113,7 @@ def apply_classifier(
         s.made, why = verdict(s.made, s.cross_offset, s.make_prob, threshold, make_tolerance, rescue, rescue_max_offset)
         if why == "overruled":
             log.info("shot %d: make overruled by classifier (p(miss) %.2f > %.2f)", s.number, pm, threshold)
-        elif why == "rescued":
-            log.info("shot %d: miss rescued by classifier (make_prob %.2f >= %.2f, rim_offset %.2f)",
-                     s.number, s.make_prob, rescue, s.cross_offset)
+        elif why:
+            log.info("shot %d: miss rescued by classifier - %s (make_prob %.2f >= %.2f, rim_offset %.2f, exit %s m/s)",
+                     s.number, "exit-speed rule undone" if why == "exit rule undone" else "near miss",
+                     s.make_prob, rescue, s.cross_offset, s.exit_speed_mps)

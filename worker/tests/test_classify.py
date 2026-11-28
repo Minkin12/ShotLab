@@ -55,9 +55,10 @@ def test_no_shots_no_work(tmp_path):
     assert clf.seen == []
 
 
-def test_rescue_only_confident_near_misses(tmp_path):
+def test_rescue_only_confident_misses_near_the_rim(tmp_path):
     shots = [_shot(1, False, 20, offset=0.7), _shot(2, False, 50, offset=0.7),
-             _shot(3, False, 80, offset=1.5), _shot(4, False, 110, offset=0.3)]  # 4: exit-speed style miss
-    clf = FakeClassifier([0.02, 0.2, 0.01, 0.01])
+             _shot(3, False, 80, offset=1.5), _shot(4, False, 110, offset=0.3),  # 4: exit-speed miss
+             _shot(5, False, 130, offset=0.3)]
+    clf = FakeClassifier([0.02, 0.2, 0.01, 0.01, 0.3])
     apply_classifier(_video(tmp_path), shots, FPS, 0.6, clf, make_tolerance=0.6, rescue=0.95, rescue_max_offset=0.9)
-    assert [s.made for s in shots] == [True, False, False, False]
+    assert [s.made for s in shots] == [True, False, False, True, False]

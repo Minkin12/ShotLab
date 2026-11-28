@@ -149,6 +149,48 @@ def detect_shots(frames: list[FrameData], fps: float, cfg: Config) -> list[Shot]
     return shots
 
 
+CONTACT_TOLERANCE = 0.5  # ball widths off the shot's own arc = it hit the rim or backboard
+APEX_WINDOW = 5  # detections each side that must be lower for a point to count as the apex
+
+
+def _first_apex(seg: list[TrackPoint]) -> int:
+    """Index of the shot's own apex: the first local top of the arc.
+
+    Not simply the highest point - a ball that bounces high off the rim can go
+    higher than the shot did.
+    """
+    ys = [p[2] for p in seg]
+    for i in range(len(ys)):
+        lo, hi = max(0, i - APEX_WINDOW), i + APEX_WINDOW + 1
+        if ys[i] <= min(ys[lo:hi]):
+            return i
+    return min(range(len(ys)), key=ys.__getitem__)
+
+
+def _contact_frame(seg: list[TrackPoint], plane: float, fps: float) -> int | None:
+    """Last frame on the shot's own arc before it hits something, or None if it never leaves it.
+
+    Fits the clearly-free part of the flight (up to two ball widths above the rim
+    on the way down) and follows the ball forward while it stays on that parabola.
+    The ball often meets the front or top of the rim with its centre still a little
+    above the rim plane, which the height test in _classify can miss; without this
+    the bounce afterwards ends up in the arc fit.
+    """
+    apex = _first_apex(seg)
+    k = next((i for i in range(apex, len(seg)) if seg[i][2] >= plane - 2 * seg[i][3]), None)
+    if k is None or k < 6:
+        return None
+    base, rest = list(seg[:k]), seg[k:]
+    for i, p in enumerate(rest):
+        if _residual(base, fps, p) > CONTACT_TOLERANCE * p[3]:
+            nxt = rest[i + 1] if i + 1 < len(rest) else None
+            if nxt is None or _residual(base, fps, nxt) > CONTACT_TOLERANCE * nxt[3]:
+                return base[-1][0]
+            continue  # one stray detection: skip it
+        base.append(p)
+    return None
+
+
 def _classify(
     track: list[TrackPoint], up_i: int, end_i: int, rim: Box, cfg: Config, number: int, fps: float
 ) -> Shot | None:
@@ -172,9 +214,14 @@ def _classify(
     # within half a ball width of the rim height (where it can first touch the rim).
     # Searching only after the apex matters: on the way up the ball passes the same
     # height, and with a tall rim(+net) box that is right where the shot starts.
+    # The apex is the shot's own first top (a high bounce can go higher), and the
+    # flight also ends earlier if the ball leaves its arc before getting that low.
     seg = track[up_i : end_i + 1]
-    apex = min(range(len(seg)), key=lambda k: seg[k][2])
+    apex = _first_apex(seg)
     first_reach = next((p[0] for p in seg[apex:] if p[2] >= plane - 0.5 * p[3]), b[0])
+    contact = _contact_frame(seg, plane, fps)
+    if contact is not None:
+        first_reach = min(first_reach, contact)
     return Shot(
         number=number,
         up_frame=up_frame,

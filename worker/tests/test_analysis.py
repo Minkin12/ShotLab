@@ -209,6 +209,56 @@ def test_rim_bounce_keeps_arc_and_scores_miss(cfg):
     assert s.launch_angle_deg == pytest.approx(50, abs=2)
 
 
+def _bounce_at_rim_height(frames, rel, height_widths, path):
+    """Replace the ball's track from the first frame after the apex where it is
+    `height_widths` ball widths above the rim plane: path(k) -> (x, y) for k frames later."""
+    plane = rim_plane(RIM)
+    balls = [f for f in frames if f.idx > rel and f.ball]
+    apex = min(balls, key=lambda f: f.ball.cy).idx
+    hit = next(f for f in balls if f.idx > apex and f.ball.cy >= plane - height_widths * BALL_W)
+    x0, y0 = hit.ball.cx, hit.ball.cy
+    for f in frames:
+        if f.idx > hit.idx:
+            x, y = path(f.idx - hit.idx, x0, y0)
+            f.ball = None if y > 900 else Box(x - BALL_W / 2, y - BALL_W / 2, x + BALL_W / 2, y + BALL_W / 2)
+    return apex
+
+
+def test_front_rim_hit_above_rim_plane_ends_the_arc(cfg):
+    """The ball clips the front of the rim with its centre still above the rim plane
+    and bounces back out: the arc is fitted up to that hit, not through the bounce."""
+    frames, rel = shot_frames(target_x=RIM.x1 + 5)
+
+    def back_out(k, x0, y0):  # back towards the shooter, ~50 px hop, then down in front of the rim
+        t = k / FPS
+        return x0 - 220 * t, y0 - 450 * t + 0.5 * 2000 * t * t
+
+    _bounce_at_rim_height(frames, rel, 0.8, back_out)
+    s = analyze_frames(frames, FPS, cfg)[0]
+    assert not s.made
+    assert s.launch_angle_deg == pytest.approx(50, abs=2)
+    assert s.entry_angle_deg is not None
+
+
+def test_bounce_higher_than_the_shot_does_not_move_the_apex(cfg):
+    """A ball that pops off the back of the rim higher than its own apex, then drops in:
+    the free flight still ends at the first rim contact, so the arc is measured."""
+    frames, rel = shot_frames(target_x=RIM.x2 - 8)
+    apex_y = min(f.ball.cy for f in frames if f.ball and f.idx > rel)
+    plane = rim_plane(RIM)
+
+    def pop_up(k, x0, y0):  # straight up past the shot's apex, back down through the middle
+        t = k / FPS
+        vy = -math.sqrt(2 * 2000 * (y0 - apex_y + 80))
+        return x0 + (RIM.cx - x0) * min(1.0, t / 0.8), y0 + vy * t + 0.5 * 2000 * t * t
+
+    _bounce_at_rim_height(frames, rel, 0.3, pop_up)
+    s = analyze_frames(frames, FPS, cfg)[0]
+    assert min(f.ball.cy for f in frames if f.ball and f.idx > rel) < apex_y < plane
+    assert s.made
+    assert s.launch_angle_deg == pytest.approx(50, abs=2)
+
+
 def test_few_stray_detections_are_trimmed(cfg):
     frames, rel = shot_frames(target_x=RIM.cx)
     flight = [f for f in frames if f.ball is not None and rel < f.idx < rel + 50]
